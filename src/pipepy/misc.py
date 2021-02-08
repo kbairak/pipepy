@@ -1,9 +1,8 @@
 import os
+import stat as stat_  # aliasing because there's a 'stat' UNIX command
 import string
-import stat as stat_
 
 from .pipepy import PipePy
-
 
 cd = os.chdir
 export = os.environ.__setattr__

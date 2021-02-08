@@ -1,2 +1,2 @@
-from .pipepy import set_encoding, PipePy  # noqa
 from .misc import *  # noqa
+from .pipepy import PipePy, set_interactive  # noqa

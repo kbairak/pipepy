@@ -1,22 +1,53 @@
-import __main__
+import reprlib
+import inspect
 import subprocess
 import types
 from glob import glob
 
-ENCODING = "utf8"
+INTERACTIVE = False
 
 
-def set_encoding(encoding):
-    global ENCODING
-    ENCODING = encoding
+def set_interactive(value):
+    global INTERACTIVE
+    INTERACTIVE = value
 
 
 class PipePy:
+    """ Convenience utility for invoking shell commands.
+
+        Usage:
+
+            >>> igrep = PipePy('grep', '-i')
+            >>> ls = PipePy('ls')
+            >>> ps = PipePy('ps')
+
+            >>> result = ls('-l') | igrep('main')
+            >>> result.stdout
+            <<< '-rw-r--r-- 1 kbairak kbairak 3163 Jan 22 09:11 main.py'
+            >>> result.returncode
+            <<< 0
+            >>> bool(result)
+            <<< True
+    """
+
     class _NONE:
         pass
 
     def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=False,
-                 _stream_stderr=False, _wait=True, **kwargs):
+                 _stream_stderr=False, _wait=True, _text=True,
+                 _encoding="utf8", **kwargs):
+        """ Initialize a PipePy object.
+
+            `args` and `kwargs` will determine the command line arguments
+            passed to the subprocess. The rest of the keyword arguments
+            customize how the subprocess will be executed. See `_evaluate`'s
+            docstring for details.
+
+            Generally the keyword arguments should not be set by hand but by
+            other methods of PipePy, with the exception of `_stream_stdout`,
+            `_stream_stderr` and `_encoding` for which no fancy syntax exists
+            (yet).
+        """
 
         self._args = self._convert_args(args, kwargs)
         self._lazy = _lazy
@@ -24,20 +55,38 @@ class PipePy:
         self._stream_stdout = _stream_stdout
         self._stream_stderr = _stream_stderr
         self._wait = _wait
+        self._text = _text
+        self._encoding = _encoding
 
         self._returncode = None
         self._stdout = None
         self._stderr = None
 
     def __call__(self, *args, _stdin=_NONE, _stream_stdout=_NONE,
-                 _stream_stderr=_NONE, _wait=_NONE, **kwargs):
+                 _stream_stderr=_NONE, _wait=_NONE, _text=_NONE,
+                 _encoding=_NONE, **kwargs):
+        """ Make and return a copy of `self` overriding some of it's
+            initialization arguments. Also, if `__call__` is called with no
+            arguments, an evaluation will be forced on the returned copy.
+
+            The copy will not be lazy (see `_evaluate`'s docstring).
+
+                >>> ls_l = PipePy('ls', '-l')
+
+            is *almost* equivalent to
+
+                >>> ls = PipePy('ls')
+                >>> ls_l = ls('-l')
+        """
 
         force = (not args and
                  not kwargs and
                  _stdin is self._NONE and
                  _stream_stdout is self._NONE and
                  _stream_stderr is self._NONE and
-                 _wait is self._NONE)
+                 _wait is self._NONE and
+                 _text is self._NONE and
+                 _encoding is self._NONE)
 
         args = self._args + list(args)
 
@@ -49,6 +98,10 @@ class PipePy:
             _stream_stderr = self._stream_stderr
         if _wait is self._NONE:
             _wait = self._wait
+        if _text is self._NONE:
+            _text = self._text
+        if _encoding is self._NONE:
+            _encoding = self._encoding
 
         result = self.__class__(*args,
                                 _lazy=True,
@@ -56,6 +109,8 @@ class PipePy:
                                 _stream_stdout=_stream_stdout,
                                 _stream_stderr=_stream_stderr,
                                 _wait=_wait,
+                                _text=_text,
+                                _encoding=_encoding,
                                 **kwargs)
 
         if force:
@@ -97,6 +152,31 @@ class PipePy:
         return self.__class__(*(self._args + [attr]), _lazy=False)
 
     def _evaluate(self):
+        """ Actually evaluates the subprocess. `__init__`'s keyword arguments
+            change how this behaves:
+
+            - _lazy: If True and this instance has been evaluated before, it
+                  will do nothing. Otherwise a new evaluation will be forced.
+
+            - _stdin: If set, it will be passed to the subprocess as its
+                  standard input. If it's a file-like object, it will be
+                  directly set as the subprocess's stdin, otherwise it will be
+                  passed to a `Popen.communicate` call later on
+
+            - _stream_stdout: If true, `None` will be set as the subprocess's
+                  stdout, resulting in its output being streamed to the console
+                  and thus not captured by `self._stdout`
+
+            - _stream_stderr: Same as `_stream_stdout`, but for stderr
+
+            - _text: Whether the subprocess will be opened in text mode.
+                  Defaults to True
+
+            - _wait: Whether the subprocess will be waited for. If False, the
+                  caller may interact with the process via `self._process`,
+                  before waiting for it with `self.wait()`
+        """
+
         if self._returncode is not None and self._lazy:
             return
 
@@ -122,13 +202,14 @@ class PipePy:
             stderr = subprocess.PIPE
 
         self._process = subprocess.Popen(self._args, stdin=stdin,
-                                         stdout=stdout, stderr=stderr)
+                                         stdout=stdout, stderr=stderr,
+                                         text=self._text)
 
         if self._wait:
-            self._wait_process()
+            self.wait()
 
-    def _wait_process(self):
-        if isinstance(self._stdin, bytes):
+    def wait(self):
+        if isinstance(self._stdin, (bytes, str)):
             stdin = self._stdin
         else:
             stdin = None
@@ -137,6 +218,30 @@ class PipePy:
 
     @staticmethod
     def _convert_args(args, kwargs):
+        """ Do some fancy processing of arguments. The intention is to enable
+            things like:
+
+                >>> PipePy('sleep', 10)
+                >>> # Equivalent to
+                >>> PipePy('sleep', '10')
+
+                >>> PipePy('ls', sort="size")
+                >>> # Equivalent to
+                >>> PipePy('ls', '--sort=size')
+
+                >>> PipePy('ls', escape=True)
+                >>> # Equivalent to
+                >>> PipePy('ls', '--escape')
+
+            Because positional arguments come before keyword arguments and the
+            order of keyword arguments is not guaranteed, you can apply
+            multiple function calls to enforce your preferred ordering:
+
+                >>> PipePy('ls', sort="size")('-l')
+                >>> # Equivalent to
+                >>> PipePy('ls', '--sort=size', '-l')
+        """
+
         args = [str(arg) for arg in args]
 
         final_args = []
@@ -160,6 +265,8 @@ class PipePy:
 
     @property
     def returncode(self):
+        """ Lazily return the subprocess's return code. """
+
         self._evaluate()
         return self._returncode
 
@@ -167,6 +274,7 @@ class PipePy:
         """ Use in boolean expressions.
 
             Usage:
+
                 >>> git = PipePy('git')
                 >>> grep = PipePy('grep')
 
@@ -178,14 +286,23 @@ class PipePy:
 
     @property
     def stdout(self):
+        """ Lazily return the subprocess's stdout. """
+
         self._evaluate()
         return self._stdout
 
     def __str__(self):
-        return self.stdout.decode(ENCODING)
+        """ Return stdout as string, even if the subprocess is opened in binary
+            mode. """
+        result = self.stdout
+        if not self._text:
+            result = result.decode(self._encoding)
+        return result
 
     @property
     def stderr(self):
+        """ Lazily return the subprocess's stderr. """
+
         self._evaluate()
         return self._stderr
 
@@ -193,7 +310,6 @@ class PipePy:
         """ Usage:
 
             >>> ps = PipePy('ps')
-
             >>> ps.as_table()
             <<< [{'PID': '11233', 'TTY': 'pts/4', 'TIME': '00:00:01',
             ...   'CMD': 'zsh'},
@@ -213,13 +329,22 @@ class PipePy:
         return result
 
     def __iter__(self):
+        """ Support the iteration interface:
+
+            Usage:
+
+                >>> ls = PipePy('ls')
+                >>> for name in ls:
+                ...     print(ls.upper())
+        """
+
         return iter(self.stdout.split())
 
     def __repr__(self):
-        if hasattr(__main__, "__file__"):
-            return self._normal_repr()
-        else:
+        if INTERACTIVE:
             return self._interactive_repr()
+        else:
+            return self._normal_repr()
 
     def _normal_repr(self):
         result = ["PipePy("]
@@ -228,27 +353,30 @@ class PipePy:
         else:
             result.append('[]')
         if self._stdin is not None:
-            result.extend([", _stdin=", repr(self._stdin)])
+            result.extend([", _stdin=", reprlib.repr(self._stdin)])
         if self._returncode is not None:
-            result.extend([", returncode=", repr(self._returncode)])
+            result.extend([", returncode=", reprlib.repr(self._returncode)])
             if self._stdout is not None:
-                result.extend([", stdout=", repr(self._stdout)])
+                result.extend([", stdout=", reprlib.repr(self._stdout)])
             if self._stderr:
-                result.extend([", stderr=", repr(self._stderr)])
+                result.extend([", stderr=", reprlib.repr(self._stderr)])
         result.append(')')
         return ''.join(result)
 
     def _interactive_repr(self):
         self._evaluate()
-        return str(self) + self.stderr.decode(ENCODING)
+        result = self.stdout + self.stderr
+        if not self._text:
+            result = result.decode(self._encoding)
+        return result
 
     # Redirect output
     def __gt__(self, filename):
         """ Write output to file
 
             Usage:
-                >>> ps = PipePy('ps')
 
+                >>> ps = PipePy('ps')
                 >>> ps > 'progs.txt'
         """
 
@@ -259,8 +387,8 @@ class PipePy:
         """ Append output to file
 
             Usage:
-                >>> ps = PipePy('ps')
 
+                >>> ps = PipePy('ps')
                 >>> ps >> 'progs/txt'
         """
 
@@ -271,13 +399,26 @@ class PipePy:
         """ Use file as input
 
             Usage:
-                >>> grep = PipePy('grep')
 
+                >>> grep = PipePy('grep')
                 >>> grep('python') < 'progs.txt'
         """
 
         with open(filename, 'rb') as f:
-            return self(_stdin=f.read())
+            return self(_stdin=f)
+
+    def __invert__(self):
+        """ Set binary mode:
+
+            Usage:
+
+                >>> (ls | ~gzip)()
+        """
+
+        return self(_text=False)
+
+    def __neg__(self):
+        return self(_wait=False)()
 
     def __or__(left, right):
         return PipePy._pipe(left, right)
@@ -287,6 +428,85 @@ class PipePy:
 
     @staticmethod
     def _pipe(left, right):
+        """ Piping functionality. The supported use-cases are:
+
+            1. `left` is a string and `right` is a `PipePy` instance:
+
+                `left` will be used as `right`'s stdin. `left`'s type will be
+                converted from/to bytes/str according to `right`'s `_text`
+                value. `right` will not be evaluated straight away
+
+            2. `left` is an iterable and `right` is a `PipePy` instance:
+
+                `right` will be evaluated with `_wait=False`. `left` will be
+                iterated over and fed into `right`'s process's stdin. Finally,
+                `right` will be waited for.
+
+            3. `left` and `right` are both `PipePy` instances:
+
+                If `left` is not evaluated yet, `left`'s stdout file describtor
+                will be used as `right`'s stdin. Otherwise, `left`'s captured
+                stdout will be used as `right`'s input. `right` will not be
+                evaluated
+
+            4. `left` is a `PipePy` instance and `right` is a function
+
+                `left` will be evaluated and `right` will be invoked with
+                `returncode`, `stdout` and `stderr` arguments.
+
+            5. `left` is a `PipePy` instance and `right` is a generator
+
+                `left`'s subprocess is allowed to interact with the generator
+                in a read/write fashion. When the generator encounters a line
+                like:
+
+                    >>> command_output = (yield generator_output)
+
+                - the generator will be suspended
+                - `left`'s subprocess's stdin will be fed with
+                  `generator_output`
+                - the next line from the subprocess's stdout will be captured
+                  and returned by the `yield` expression to be assigned to the
+                  `command_output` variable
+
+                If `generator_output` is None, nothing will be fed to the
+                subprocess.
+
+                eg assume the "interactive" command poses a few simple math
+                questions and expects a correct answer:
+
+                    $ interactive
+                    3 + 4 ?
+                    < 7
+                    Correct!
+                    8 + 2 ?
+                    < 12
+                    Wrong!
+                    < Ctrl-d
+
+                We can interact with this command like this:
+
+                    >>> interactive = PipePy('interactive')
+                    >>> def play():
+                    ...     try:
+                    ...         # We will play at most 5 times
+                    ...         for _ in range(5):
+                    ...             # Get a line from the subprocess
+                    ...             question = (yield)
+                    ...             a, _, b, _ = question.split()
+                    ...             answer = str(int(a) + int(b)) + "\n"
+                    ...             # Send the answer to the subprocess, also
+                    ...             # get the next line
+                    ...             verdict = (yield answer)
+                    ...     except GeneratorExit:
+                    ...         # The subprocess has exited
+                    ...         pass
+                    ...     # When `play` exits, the subprocess stdin will be
+                    ...     # closed.
+
+                    >>> interactive | play()
+        """
+
         if isinstance(left, PipePy):
             left_is_iterable = False
         else:
@@ -302,15 +522,41 @@ class PipePy:
                 if left._stdout is not None:
                     stdin = left._stdout
                 else:
-                    left = left(_wait=False)
-                    stdin = left()._process.stdout
-                return right(_stdin=stdin)
+                    left = -left
+                    stdin = left._process.stdout
+                result = right(_stdin=stdin)
+                return result
             elif callable(right):
-                return right(returncode=left.returncode,
-                             stdout=left.stdout,
-                             stderr=left.stderr)
+                error = TypeError(f"Cannot pipe {left!r} to {right!r}: "
+                                  "Invalid signature")
+                parameters = inspect.signature(right).parameters
+                if not parameters:
+                    raise error
+                if not all((value.kind ==
+                            inspect.Parameter.POSITIONAL_OR_KEYWORD
+                            for value in parameters.values())):
+                    raise error
+                keys = set(parameters.keys())
+                if keys <= {'returncode', 'output', 'errors'}:
+                    arguments = {'returncode': left.returncode,
+                                 'output': left.stdout,
+                                 'errors': left.stderr}
+                elif keys <= {'stdout', 'stderr'}:
+                    left = -left
+                    arguments = {'stdout': left._process.stdout,
+                                 'stderr': left._process.stderr}
+                else:
+                    raise error
+                kwargs = {key: value
+                          for key, value in arguments.items()
+                          if key in keys}
+
+                result = right(**kwargs)
+                if not left._wait:
+                    left.wait()
+                return result
             elif isinstance(right, types.GeneratorType):
-                left = left(_wait=False)()
+                left = -left
                 try:
                     generator_line = next(right)  # Prime generator
                     if generator_line is not None:
@@ -321,25 +567,44 @@ class PipePy:
                         if generator_line is not None:
                             left._process.stdin.write(generator_line)
                             left._process.stdin.flush()
-                except StopIteration:
-                    left._wait_process()
-                return left
+                    right.throw(StopIteration)
+                except StopIteration as exc:
+                    left.wait()
+                    if len(exc.args):
+                        return (left, exc.args[0])
+                    else:
+                        return (left, None)
             else:
                 raise TypeError("Unrecognized operands")
-        elif isinstance(left, bytes):
+        elif isinstance(left, (bytes, str)):
+            if right._text:
+                try:
+                    left = left.decode(right._encoding)
+                except AttributeError:
+                    pass
+            else:
+                try:
+                    left = left.encode(right._encoding)
+                except AttributeError:
+                    pass
             return right(_stdin=left)
         elif left_is_iterable:
-            right = right(_wait=False)()
+            right = -right
             for chunk in left:
+                if right._text:
+                    try:
+                        chunk = chunk.decode(right._encoding)
+                    except AttributeError:
+                        pass
+                else:
+                    try:
+                        chunk = chunk.encode(right._encoding)
+                    except AttributeError:
+                        pass
                 right._process.stdin.write(chunk)
-                right._process.stdin.flush()
-            right._wait_process()
+                if '\n' in chunk:
+                    right._process.stdin.flush()
+            right.wait()
             return right
         else:
             raise TypeError("Unrecognized operands")
-
-    def __invert__(self):
-        if self._stream_stderr:
-            return self(_stream_stdout=True, _stream_stderr=False)
-        else:
-            return self(_stream_stdout=False, _stream_stderr=True)
