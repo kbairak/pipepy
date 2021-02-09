@@ -62,6 +62,7 @@ class PipePy:
         self._stdout = None
         self._stderr = None
 
+    # Customizing instance
     def __call__(self, *args, _stdin=_NONE, _stream_stdout=_NONE,
                  _stream_stderr=_NONE, _wait=_NONE, _text=_NONE,
                  _encoding=_NONE, **kwargs):
@@ -151,6 +152,70 @@ class PipePy:
 
         return self.__class__(*(self._args + [attr]), _lazy=False)
 
+    def __invert__(self):
+        """ Set binary mode:
+
+            Usage:
+
+                >>> (ls | ~gzip)()
+        """
+
+        return self(_text=False)
+
+    def __neg__(self):
+        return self(_wait=False)()
+
+    def __pos__(self):
+        return self(_stream_stdout=True, _stream_stderr=True)
+
+    @staticmethod
+    def _convert_args(args, kwargs):
+        """ Do some fancy processing of arguments. The intention is to enable
+            things like:
+
+                >>> PipePy('sleep', 10)
+                >>> # Equivalent to
+                >>> PipePy('sleep', '10')
+
+                >>> PipePy('ls', sort="size")
+                >>> # Equivalent to
+                >>> PipePy('ls', '--sort=size')
+
+                >>> PipePy('ls', escape=True)
+                >>> # Equivalent to
+                >>> PipePy('ls', '--escape')
+
+            Because positional arguments come before keyword arguments and the
+            order of keyword arguments is not guaranteed, you can apply
+            multiple function calls to enforce your preferred ordering:
+
+                >>> PipePy('ls', sort="size")('-l')
+                >>> # Equivalent to
+                >>> PipePy('ls', '--sort=size', '-l')
+        """
+
+        args = [str(arg) for arg in args]
+
+        final_args = []
+        for arg in args:
+            arg = str(arg)
+            globbed = glob(arg, recursive=True)
+            if globbed:
+                final_args.extend(globbed)
+            else:
+                final_args.append(arg)
+
+        for key, value in kwargs.items():
+            key = key.replace('_', '-')
+            if value is True:
+                final_args.append(f"--{key}")
+            elif value is False:
+                final_args.append(f"--no-{key}")
+            else:
+                final_args.append(f"--{key}={value}")
+        return final_args
+
+    # Evaluation
     def _evaluate(self):
         """ Actually evaluates the subprocess. `__init__`'s keyword arguments
             change how this behaves:
@@ -216,59 +281,27 @@ class PipePy:
         self._stdout, self._stderr = self._process.communicate(stdin)
         self._returncode = self._process.wait()
 
-    @staticmethod
-    def _convert_args(args, kwargs):
-        """ Do some fancy processing of arguments. The intention is to enable
-            things like:
-
-                >>> PipePy('sleep', 10)
-                >>> # Equivalent to
-                >>> PipePy('sleep', '10')
-
-                >>> PipePy('ls', sort="size")
-                >>> # Equivalent to
-                >>> PipePy('ls', '--sort=size')
-
-                >>> PipePy('ls', escape=True)
-                >>> # Equivalent to
-                >>> PipePy('ls', '--escape')
-
-            Because positional arguments come before keyword arguments and the
-            order of keyword arguments is not guaranteed, you can apply
-            multiple function calls to enforce your preferred ordering:
-
-                >>> PipePy('ls', sort="size")('-l')
-                >>> # Equivalent to
-                >>> PipePy('ls', '--sort=size', '-l')
-        """
-
-        args = [str(arg) for arg in args]
-
-        final_args = []
-        for arg in args:
-            arg = str(arg)
-            globbed = glob(arg, recursive=True)
-            if globbed:
-                final_args.extend(globbed)
-            else:
-                final_args.append(arg)
-
-        for key, value in kwargs.items():
-            key = key.replace('_', '-')
-            if value is True:
-                final_args.append(f"--{key}")
-            elif value is False:
-                final_args.append(f"--no-{key}")
-            else:
-                final_args.append(f"--{key}={value}")
-        return final_args
-
+    # Get results
     @property
     def returncode(self):
         """ Lazily return the subprocess's return code. """
 
         self._evaluate()
         return self._returncode
+
+    @property
+    def stdout(self):
+        """ Lazily return the subprocess's stdout. """
+
+        self._evaluate()
+        return self._stdout
+
+    @property
+    def stderr(self):
+        """ Lazily return the subprocess's stderr. """
+
+        self._evaluate()
+        return self._stderr
 
     def __bool__(self):
         """ Use in boolean expressions.
@@ -284,13 +317,6 @@ class PipePy:
 
         return self.returncode == 0
 
-    @property
-    def stdout(self):
-        """ Lazily return the subprocess's stdout. """
-
-        self._evaluate()
-        return self._stdout
-
     def __str__(self):
         """ Return stdout as string, even if the subprocess is opened in binary
             mode. """
@@ -298,13 +324,6 @@ class PipePy:
         if not self._text:
             result = result.decode(self._encoding)
         return result
-
-    @property
-    def stderr(self):
-        """ Lazily return the subprocess's stderr. """
-
-        self._evaluate()
-        return self._stderr
 
     def as_table(self):
         """ Usage:
@@ -408,22 +427,6 @@ class PipePy:
 
         with open(filename, 'rb') as f:
             return self(_stdin=f)
-
-    def __invert__(self):
-        """ Set binary mode:
-
-            Usage:
-
-                >>> (ls | ~gzip)()
-        """
-
-        return self(_text=False)
-
-    def __neg__(self):
-        return self(_wait=False)()
-
-    def __pos__(self):
-        return self(_stream_stdout=True, _stream_stderr=True)
 
     def __or__(left, right):
         return PipePy._pipe(left, right)
