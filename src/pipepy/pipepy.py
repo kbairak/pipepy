@@ -1,7 +1,6 @@
 import reprlib
 import inspect
 import subprocess
-import types
 from glob import glob
 
 INTERACTIVE = False
@@ -358,8 +357,12 @@ class PipePy:
         """
 
         command = -self
-        for line in command._process.stdout:
-            yield from line.split()
+        yield from command._process.stdout
+
+    def iter_words(self):
+        for line in self:
+            for word in line.split():
+                yield word
 
     def __repr__(self):
         if INTERACTIVE:
@@ -461,58 +464,6 @@ class PipePy:
 
                 `left` will be evaluated and `right` will be invoked with
                 `returncode`, `stdout` and `stderr` arguments.
-
-            5. `left` is a `PipePy` instance and `right` is a generator
-
-                `left`'s subprocess is allowed to interact with the generator
-                in a read/write fashion. When the generator encounters a line
-                like:
-
-                    >>> command_output = (yield generator_output)
-
-                - the generator will be suspended
-                - `left`'s subprocess's stdin will be fed with
-                  `generator_output`
-                - the next line from the subprocess's stdout will be captured
-                  and returned by the `yield` expression to be assigned to the
-                  `command_output` variable
-
-                If `generator_output` is None, nothing will be fed to the
-                subprocess.
-
-                eg assume the "interactive" command poses a few simple math
-                questions and expects a correct answer:
-
-                    $ interactive
-                    3 + 4 ?
-                    < 7
-                    Correct!
-                    8 + 2 ?
-                    < 12
-                    Wrong!
-                    < Ctrl-d
-
-                We can interact with this command like this:
-
-                    >>> interactive = PipePy('interactive')
-                    >>> def play():
-                    ...     try:
-                    ...         # We will play at most 5 times
-                    ...         for _ in range(5):
-                    ...             # Get a line from the subprocess
-                    ...             question = (yield)
-                    ...             a, _, b, _ = question.split()
-                    ...             answer = str(int(a) + int(b)) + "\n"
-                    ...             # Send the answer to the subprocess, also
-                    ...             # get the next line
-                    ...             verdict = (yield answer)
-                    ...     except GeneratorExit:
-                    ...         # The subprocess has exited
-                    ...         pass
-                    ...     # When `play` exits, the subprocess stdin will be
-                    ...     # closed.
-
-                    >>> interactive | play()
         """
 
         if isinstance(left, PipePy):
@@ -536,7 +487,7 @@ class PipePy:
                 return result
             elif callable(right):
                 error = TypeError(f"Cannot pipe {left!r} to {right!r}: "
-                                  "Invalid signature")
+                                  "Invalid function signature")
                 parameters = inspect.signature(right).parameters
                 if not parameters:
                     raise error
@@ -563,25 +514,6 @@ class PipePy:
                 if not left._wait:
                     left.wait()
                 return result
-            elif isinstance(right, types.GeneratorType):
-                left = -left
-                try:
-                    generator_line = next(right)  # Prime generator
-                    if generator_line is not None:
-                        left._process.stdin.write(generator_line)
-                        left._process.stdin.flush()
-                    for command_line in left._process.stdout:
-                        generator_line = right.send(command_line)
-                        if generator_line is not None:
-                            left._process.stdin.write(generator_line)
-                            left._process.stdin.flush()
-                    right.throw(StopIteration)
-                except StopIteration as exc:
-                    left.wait()
-                    if len(exc.args):
-                        return (left, exc.args[0])
-                    else:
-                        return (left, None)
             else:
                 raise TypeError("Unrecognized operands")
         elif isinstance(left, (bytes, str)):
@@ -616,3 +548,13 @@ class PipePy:
             return right
         else:
             raise TypeError("Unrecognized operands")
+
+    # Context processor
+    def __enter__(self):
+        if self._wait:
+            raise TypeError("Context processors only work with background "
+                            "commands")
+        return self._process.stdin, self._process.stdout, self._process.stderr
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.wait()

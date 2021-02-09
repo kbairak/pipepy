@@ -14,14 +14,16 @@ A Python library for invoking and interacting with shell commands.
    * [2. Left operand is a string](#2-left-operand-is-a-string)
    * [3. Left operand is any kind of iterable](#3-left-operand-is-any-kind-of-iterable)
    * [4. Right operand is a function](#4-right-operand-is-a-function)
-   * [5. Right operand is a generator](#5-right-operand-is-a-generator)
 * [Running in the background](#running-in-the-background)
+   * [1. Incrementally sending data to a command](#1-incrementally-sending-data-to-a-command)
+   * [2. Incrementally reading data from a command](#2-incrementally-reading-data-from-a-command)
+   * [3. Reading data from and writing data to a command](#3-reading-data-from-and-writing-data-to-a-command)
 * [Binary mode](#binary-mode)
 * [Streaming to console](#streaming-to-console)
 * ["Interactive" mode](#interactive-mode)
 * [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Tue Feb  9 11:01:51 AM EET 2021 -->
+<!-- Added by: kbairak, at: Tue Feb  9 11:11:29 PM EET 2021 -->
 
 <!--te-->
 
@@ -48,11 +50,16 @@ A Python library for invoking and interacting with shell commands.
 ## Installation
 
 ```sh
-git clone https://git@github.com/kbairak/pipepy
+python -m pip install pipepy
+
+```
+
+Or, if you want to modify the code while trying it out:
+
+```sh
+git clone https://github.com/kbairak/pipepy
 cd pipepy
-pip install .
-# or
-pip install  -e .
+python -m pip install  -e .
 ```
 
 ## Intro, basic usage
@@ -124,28 +131,59 @@ following ways:
 
 - Iterating over a command object:
 
+  This iterates over the lines of the command's `stdout`:
+
   ```python
   from pipepy import ls
   for filename in ls:
       print(filename.upper)
   ```
 
-  This iterates over the words of the command's `stdout`.
+  `command.iter_words()` iterates over the words of the command's `stdout`:
 
-- Redirecting the output to something else:
+  ```python
+  from pipepy import ps
+  list(ps.iter_words())
+  # <<< ['PID', 'TTY', 'TIME', 'CMD', '11439', 'pts/5', '00:00:00', 'zsh',
+  # ...  '15532', 'pts/5', '00:00:10', 'ptipython', '15539', 'pts/5',
+  # ...  '00:00:00', 'ps']
+  ```
+
+- Redirecting the output to something else (this will be further explained
+  below):
 
   ```python
   from pipepy import ls, grep
   ls > 'files.txt'
   ls >> 'files.txt'
   ls | grep('info.txt')  # `ls` will be evaluated, `grep` will not
-  ls | lambda **kwargs: kwargs
-  ls | generator_func()  # Will be discussed later
+  ls | lambda output: output.upper()
+  ```
+
+- Redirecting from an iterable (this will be further explained below):
+
+  ```python
+  from pipepy import grep
+  (f"{i}\n" for i in range(5)) | grep(2)
+  ```
+
+- Setting the command to run in the background (this will be further explained
+  below):
+
+  ```python
+  download = -wget('http://...')
+  # Do something else in the meantime
+  download.wait()
+  if download:
+      print("Download was successful")
+  else:
+      print("Download was successful")
+
   ```
 
 If you are not interested in the output of a command but want to evaluate it
 nevertheless, you can call it with empty arguments. So, this will actually
-invoke the command.
+invoke the command (and wait for it to finish).
 
 ```python
 from pipepy import wget
@@ -154,8 +192,8 @@ wget('http://...')()
 
 ## Customizing commands
 
-Invoking a command will return a copy with extra arguments. So these are
-equivalent:
+Calling a command with non empty arguments will return a modified unevaluated
+copy. So the following are equivalent:
 
 ```python
 from pipepy import PipePy
@@ -253,7 +291,7 @@ grep('info.txt') <  'files.txt'  # Will use files.txt as input
 
 ## Pipes
 
-The `|` operator is used to customize how a command gets its input from and
+The `|` operator is used to customize where a command gets its input from and
 what it does with its output. Depending on the types of the operands, different
 behaviors will emerge:
 
@@ -372,94 +410,6 @@ ping('-c', 30, "google.com") | mean_ping
 # ... Mean time is 72.19666666666667 ms
 ```
 
-### 5. Right operand is a generator
-
-This allows the generator to interact with the command in a read/write fashion
-by using Python's functionality of
-[passing values into a generator](https://docs.python.org/3/howto/functional.html#passing-values-into-a-generator).
-
-When the generator encounters a line like:
-
-```python
-command_output = (yield generator_output)
-```
-
-then
-
-1. the generator will be suspended
-2. The command's stdin will be fed with `generator_output`
-3. the next line from the command's `stdout` will be captured and returned by
-   the `yield` expression to be assigned to the `command_output` variable and
-   the generator will resume
-
-Lets assume we have a command that makes the user take a math quiz. A normal
-interaction with this command would look like this:
-
-```
-→ math_quiz
-3 + 4 ?
-→ 7
-Correct!
-8 + 2 ?
-→ 12
-Wrong!
-→ Ctrl-d
-```
-
-We can interact with this command like this:
-
-```python
-from pipepy import math_quiz
-
-def play():
-    result = []
-    try:
-        for _ in range(3):
-            question = (yield)
-            a, _, b, _ = question.split()
-            answer = str(int(a) + int(b)) + "\n"
-            verdict = (yield answer)
-            result.append((question, answer, verdict))
-    except StopIteration:
-        pass
-    return result
-
-# Remember, `play` is a function, `play()` is a generator
-math_quiz | play()
-# <<< (PipePy('math_quiz', returncode=0, stdout=''),
-# ...  [('7 + 10 ?\n', '17\n', 'Correct!\n'),
-# ...   ('5 + 9 ?\n', '14\n', 'Correct!\n'),
-# ...   ('5 + 10 ?\n', '15\n', 'Correct!\n')])
-```
-
-The return value of the whole pipe expression will be a tuple with the `PipePy`
-object and the return value of the generator.
-
-If the generator exits before the command, an EOF will be sent to the command's
-stdin. If the command exits before the generator, a `StopIteration` will be
-raised during a `yield` statement, which you will have to handle.
-
-`yield` will return precisely one line from the command each time. If you pass
-nothing to `yield` as an argument, no line will be fed to the command until the
-next `yield` command. This way, if your generator wants to read, say, 3 lines
-before replying with one, you should do:
-
-```python
-next_3_lines = [(yield), (yield), (yield)]
-fourth_line = (yield "Some reply\n")
-```
-
-Similarly, if you want to send 3 lines before reading a reply, simply include
-some newline characters in `yield`'s argument:
-
-```python
-reply = (yield "first line\nsecond line\nthird line\n")
-```
-
-In general, you should expect lines from the command to end with a newline
-character and you should take care to send back lines that end with a newline
-character.
-
 ## Running in the background
 
 You can run commands in the background by prepending `-` to them. At a later
@@ -496,6 +446,133 @@ main()
 # ... Process finished               at 3.004188776016235
 ```
 
+**Interracting with background processes**
+
+There are 3 ways to interact with a background process: _read-only_,
+_write-only_ and _read/write_. We have already covered _read-only_ and
+_write-only_:
+
+### 1. Incrementally sending data to a command
+
+This is done by piping from an iterable to a command. The command actually runs
+in the background and the iterable's data is fed to it as it becomes available.
+We will slightly modify the previous example to better demonstrate this:
+
+```python
+import random
+import time
+from pipepy import grep
+
+def my_stdin():
+    start = time.time()
+    for _ in range(500):
+        time.sleep(.01)
+        yield f"{time.time() - start} {random.randint(1, 100)}\n"
+
+my_stdin() | grep('-E', r'\b17$', _stream_stdout=True)
+# <<< 0.3154888153076172 17
+# ... 1.5810892581939697 17
+# ... 1.7773401737213135 17
+# ... 2.8303775787353516 17
+# ... 3.4419643878936768 17
+# ... 4.511774301528931  17
+```
+
+Here, `grep` is actually run in the background and matches are printed as they
+are found since the command's output is being streamed to the console, courtesy
+of the `_stream_stdout` argument (more on this [below](#streaming-to-console)).
+
+### 2. Incrementally reading data from a command
+
+This can be done by iterating over a command's output:
+
+```python
+import time
+from pipepy import ping
+
+start = time.time()
+for line in ping('-c', 3, 'google.com'):
+    print(time.time() - start, line.upper(), end="")
+# <<< 0.15728354454040527 PING GOOGLE.COM (172.217.169.142) 56(84) BYTES OF DATA.
+# ... 0.1574106216430664  64 BYTES FROM SOF02S32-IN-F14.1E100.NET (172.217.169.142): ICMP_SEQ=1 TTL=103 TIME=71.8 MS
+# ... 1.1319730281829834  64 BYTES FROM 142.169.217.172.IN-ADDR.ARPA (172.217.169.142): ICMP_SEQ=2 TTL=103 TIME=75.3 MS
+# ... 2.1297826766967773  64 BYTES FROM 142.169.217.172.IN-ADDR.ARPA (172.217.169.142): ICMP_SEQ=3 TTL=103 TIME=73.4 MS
+# ... 2.129857063293457
+# ... 2.129875659942627   --- GOOGLE.COM PING STATISTICS ---
+# ... 2.1298911571502686  3 PACKETS TRANSMITTED, 3 RECEIVED, 0% PACKET LOSS, TIME 2004MS
+# ... 2.129910707473755   RTT MIN/AVG/MAX/MDEV = 71.827/73.507/75.253/1.399 MS
+```
+
+Again, the `ping` command is actually run in the background and each line is
+given to the body of the for-loop as it becomes available.
+
+Another way is to pipe the command to a function that has a subset of `stdin`
+and `stdout` as its arguments, as we demonstrated
+[before](#4-right-operand-is-a-function).
+
+### 3. Reading data from and writing data to a command
+
+Lets assume we have a command that makes the user take a math quiz. A normal
+interaction with this command would look like this:
+
+```
+→ math_quiz
+3 + 4 ?
+→ 7
+Correct!
+8 + 2 ?
+→ 12
+Wrong!
+→ Ctrl-d
+```
+
+Using python to interact with this command in a read/write fashion can be done
+with a `with` statement:
+
+```python
+from pipepy import math_quiz
+
+result = []
+with -math_quiz as (stdin, stdout, stderr):
+    stdout = iter((line for line in stdout if line.strip()))
+    try:
+        for _ in range(3)
+            question = next(stdout)
+            a, _, b, _ = question.split()
+            answer = str(int(a) + int(b)) + "\n"
+            stdin.write(answer)
+            stdin.flush()
+            verdict = next(stdout)
+            result.append((question, answer, verdict))
+    except StopIteration:
+        pass
+
+result
+# <<< [('10 + 7 ?\n', '17\n', 'Correct!\n'),
+# ...  ('5 + 5 ?\n', '10\n', 'Correct!\n'),
+# ...  ('5 + 5 ?\n', '10\n', 'Correct!\n')]
+```
+
+`stdin`, `stdout` and `stderr` are the open file streams of the background
+process. When the body of the `with` block finishes, an EOF is sent to the
+process and it is waited for.
+
+_When using this syntax, you **have** to prepend the command with a `-` to set
+it to run in the background. What's more, after the `with` statement you can
+inspect it for truthiness:_
+
+```python
+from pipepy import math_quiz
+
+job = -math_quiz
+with job as (stdin, stdout, stderr):
+    ...
+if job:
+    print("Math quiz successful")
+else:
+    print("Math quiz failed")
+```
+
 ## Binary mode
 
 All commands are executed in text mode, which means that they deal with `str`
@@ -505,7 +582,7 @@ objects. This can cause problems. For example:
 from pipepy import gzip
 result = "hello world" | gzip
 print(result.stdout)
-# >>> Traceback (most recent call last):
+# <<< Traceback (most recent call last):
 # ... ...
 # ... UnicodeDecodeError: 'utf-8' codec can't decode byte 0x8b in position 1: invalid start byte
 ```
@@ -636,11 +713,11 @@ ls -l
 ```
 ## TODOs
 
+- [ ] Think of more syntactic sugar (find a use for decorators/context
+      processors?)
+- [ ] Interact with background process via stdin and/or signals
+- [ ] Reorganize code
 - [ ] Tests!!! (include pypy?)
 - [ ] Github actions build
 - [ ] Add docstrings
-- [ ] Reorganize code
-- [ ] Think of more syntactic sugar (find a use for decorators/context
-      processors?)
 - [ ] Stream and capture `stdout` and `stderr`
-- [ ] Interact with background process via stdin and/or signals

@@ -94,88 +94,85 @@ r = demo(_stream_stdout=True)()
 rprint(f"    <<< {r!r}")
 print()
 
-print("# Pipe command to generator\n")
-
+print("# Context processor\n")
 
 code = """
-    >>> def play():
-    ...     result = []
+    >>> result = []
+    ... with -interactive as (stdin, stdout, stderr):
     ...     try:
+    ...         stdout = iter(stdout)
     ...         while True:
-    ...             question = (yield)
-    ...             a, plus, b, question_mark = question.split()
-    ...             answer = f"{int(a) + int(b)}\\n"
-    ...             verdict = (yield answer)
+    ...             question = next(stdout)
+    ...             a, _, b, _ = question.split()
+    ...             answer = str(int(a) + int(b)) + "\\n"
+    ...             stdin.write(answer)
+    ...             stdin.flush()
+    ...             verdict = next(stdout)
     ...             result.append((question, answer, verdict))
     ...     except StopIteration:
     ...         pass
-    ...     return result
+    >>> result
 """
 
-
-def play():
-    result = []
+rprint(code)
+r = []
+with -interactive as (stdin, stdout, stderr):
     try:
+        stdout = iter(stdout)
         while True:
-            question = (yield)
-            a, plus, b, question_mark = question.split()
-            answer = f"{int(a) + int(b)}\n"
-            verdict = (yield answer)
-            result.append((question, answer, verdict))
+            question = next(stdout)
+            a, _, b, _ = question.split()
+            answer = str(int(a) + int(b)) + "\n"
+            stdin.write(answer)
+            stdin.flush()
+            verdict = next(stdout)
+            r.append((question, answer, verdict))
     except StopIteration:
         pass
-    return result
-
-
-rprint(code)
-rprint("    >>> interactive | play(result)")
-r = interactive | play()
 rprint(f"    <<< {r!r}")
 print()
 
-
 code = """
-    >>> def play2():
-    ...     result = []
-    ...     try:
-    ...         for _ in range(3):
-    ...             a = random.randint(5, 10)
-    ...             b = random.randint(5, 10)
-    ...             question = f"{a} + {b} ?\\n"
-    ...             answer = (yield question)
-    ...             if int(answer.strip()) == a + b:
-    ...                 verdict = "Correct!\\n"
-    ...             else:
-    ...                 verdict = "Wrong!\\n"
-    ...             result.append((question, answer, verdict))
-    ...             (yield verdict)
-    ...     except StopIteration:
-    ...         pass
-    ...     return result
+    <<< result = []
+    <<< with -interactive2 as (stdin, stdout, stderr):
+    ...     stdout = iter((line for line in stdout if line.strip()))
+    ...     for _ in range(3):
+    ...         a = random.randint(5, 10)
+    ...         b = random.randint(5, 10)
+    ...         question = f"{a} + {b} ?\\n"
+    ...         stdin.write(question)
+    ...         stdin.flush()
+    ...         answer = next(stdout)
+    ...         if int(answer.strip()) == a + b:
+    ...             verdict = "Correct!\\n"
+    ...         else:
+    ...             verdict = "Wrong!\\n"
+    ...         stdin.write(verdict)
+    ...         stdin.flush()
+    ...         next(stdout)
+    ...         result.append((question, answer, verdict))
+    <<< result
 """
 
-
-def play2():
-    result = []
-    try:
-        for _ in range(3):
-            a = random.randint(5, 10)
-            b = random.randint(5, 10)
-            question = f"{a} + {b} ?\n"
-            answer = (yield question)
-            if int(answer.strip()) == a + b:
-                verdict = "Correct!\n"
-            else:
-                verdict = "Wrong!\n"
-            result.append((question, answer, verdict))
-            (yield verdict)
-    except StopIteration:
-        pass
-    return result
-
-
 rprint(code)
-rprint("    >>> result = []; interactive2 | play2(result); result")
-r = interactive2 | play2()
+
+r = []
+with -interactive2 as (stdin, stdout, stderr):
+    stdout = iter((line for line in stdout if line.strip()))
+    for _ in range(3):
+        a = random.randint(5, 10)
+        b = random.randint(5, 10)
+        question = f"{a} + {b} ?\n"
+        stdin.write(question)
+        stdin.flush()
+        answer = next(stdout)
+        if int(answer.strip()) == a + b:
+            verdict = "Correct!\n"
+        else:
+            verdict = "Wrong!\n"
+        stdin.write(verdict)
+        stdin.flush()
+        r.append((question, answer, verdict))
+
 rprint(f"    <<< {r!r}")
 print()
