@@ -1,2 +1,4 @@
 src/pipepy.egg-info
 tags
+build
+dist

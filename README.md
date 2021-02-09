@@ -19,8 +19,9 @@ A Python library for invoking and interacting with shell commands.
 * [Binary mode](#binary-mode)
 * [Streaming to console](#streaming-to-console)
 * ["Interactive" mode](#interactive-mode)
+* [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Tue Feb  9 09:28:10 AM EET 2021 -->
+<!-- Added by: kbairak, at: Tue Feb  9 11:01:51 AM EET 2021 -->
 
 <!--te-->
 
@@ -633,3 +634,13 @@ ls -l
 # ... -rw-r--r-- 1 kbairak kbairak  293 Feb  7 22:04 interactive.py
 # ... -rw-r--r-- 1 kbairak kbairak 4761 Feb  8 20:42 main.py
 ```
+## TODOs
+
+- [ ] Tests!!! (include pypy?)
+- [ ] Github actions build
+- [ ] Add docstrings
+- [ ] Reorganize code
+- [ ] Think of more syntactic sugar (find a use for decorators/context
+      processors?)
+- [ ] Stream and capture `stdout` and `stderr`
+- [ ] Interact with background process via stdin and/or signals
