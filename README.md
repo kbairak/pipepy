@@ -1,5 +1,29 @@
 A Python library for invoking and interacting with shell commands.
 
+## Table of contents
+
+<!--ts-->
+* [Why? Comparison with other similar frameworks](#why-comparison-with-other-similar-frameworks)
+* [Installation](#installation)
+* [Intro, basic usage](#intro-basic-usage)
+* [Laziness](#laziness)
+* [Customizing commands](#customizing-commands)
+* [Redirecting output to files](#redirecting-output-to-files)
+* [Pipes](#pipes)
+   * [1. Both operands are commands](#1-both-operands-are-commands)
+   * [2. Left operand is a string](#2-left-operand-is-a-string)
+   * [3. Left operand is any kind of iterable](#3-left-operand-is-any-kind-of-iterable)
+   * [4. Right operand is a function](#4-right-operand-is-a-function)
+   * [5. Right operand is a generator](#5-right-operand-is-a-generator)
+* [Running in the background](#running-in-the-background)
+* [Binary mode](#binary-mode)
+* [Streaming to console](#streaming-to-console)
+* ["Interactive" mode](#interactive-mode)
+
+<!-- Added by: kbairak, at: Tue Feb  9 09:28:10 AM EET 2021 -->
+
+<!--te-->
+
 ## Why? Comparison with other similar frameworks
 
 1. **[Xonsh](https://xon.sh/)**: Xonsh allows you to combine shell and Python
@@ -105,7 +129,7 @@ following ways:
       print(filename.upper)
   ```
 
-  This iterates over the words of the command's stdout.
+  This iterates over the words of the command's `stdout`.
 
 - Redirecting the output to something else:
 
@@ -146,6 +170,22 @@ There is a number of other ways you can customize a command:
   ```python
   from pipepy import echo
   print(echo('*'))  # Will print all files in the current folder
+  ```
+
+  You can use `glob.escape` if you want to avoid this functionality:
+
+  ```python
+  import glob
+  from pipepy import ls, echo
+
+  print(ls)
+  # <<< **a *a *aa
+
+  print(echo('*a'))
+  # <<< **a *a *aa
+
+  print(echo(glob.escape('*a')))
+  # <<< *a
   ```
 
 - **Keyword arguments**:
@@ -347,7 +387,7 @@ then
 
 1. the generator will be suspended
 2. The command's stdin will be fed with `generator_output`
-3. the next line from the command's stdout will be captured and returned by
+3. the next line from the command's `stdout` will be captured and returned by
    the `yield` expression to be assigned to the `command_output` variable and
    the generator will resume
 
@@ -429,22 +469,22 @@ import time
 from pipepy import sleep
 
 def main():
-   now = time.time()
+   start = time.time()
 
-   print(f"Starting background process at {time.time() - now}")
+   print(f"Starting background process at {time.time() - start}")
    result = -sleep(3)
 
-   print(f"Printing message at {time.time() - now}")
+   print(f"Printing message at {time.time() - start}")
 
-   print(f"Waiting for 1 second in python at {time.time() - now}")
+   print(f"Waiting for 1 second in python at {time.time() - start}")
    time.sleep(1)
 
-   print(f"Printing message at {time.time() - now}")
+   print(f"Printing message at {time.time() - start}")
 
-   print(f"Waiting for process to finish at {time.time() - now}")
+   print(f"Waiting for process to finish at {time.time() - start}")
    result.wait()
 
-   print(f"Process finished at {time.time() - now}")
+   print(f"Process finished at {time.time() - start}")
 
 main()
 # <<< Starting background process    at 0.0000004768371582031
@@ -545,6 +585,30 @@ interact with interactive commands. Consider the following 2 examples:
    print(result.stderr)
    # <<< John
    ```
+
+Also, during a script, you may not be interested in capturing the output of a
+command but may want to stream it to the console to show the command's output
+to the user. A shortcut for setting both `_stream_stdout` and `_stream_stderr`
+to `True` is the `+` sign:
+
+```python
+from pipepy import wget
+
+(+wget('https://...'))()
+```
+
+While `stdout` and `stderr` will not be captured, `returncode` will and thus
+you can still use the command in boolean expressions:
+
+```python
+from pipepy import wget
+
+if +wget('https://...'):
+     print("Download succeeded")
+else:
+     print("Download failed")
+```
+
 ## "Interactive" mode
 
 When "interactive" mode is set, the `__repr__` method will simply return

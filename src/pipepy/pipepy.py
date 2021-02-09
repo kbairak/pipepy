@@ -338,7 +338,9 @@ class PipePy:
                 ...     print(ls.upper())
         """
 
-        return iter(self.stdout.split())
+        command = -self
+        for line in command._process.stdout:
+            yield from line.split()
 
     def __repr__(self):
         if INTERACTIVE:
@@ -419,6 +421,9 @@ class PipePy:
 
     def __neg__(self):
         return self(_wait=False)()
+
+    def __pos__(self):
+        return self(_stream_stdout=True, _stream_stderr=True)
 
     def __or__(left, right):
         return PipePy._pipe(left, right)

@@ -13,6 +13,7 @@ def rprint(text):
 
 
 demo = PipePy('python', 'demo.py')
+ls = PipePy('ls')
 grep = PipePy('grep')
 gzip = PipePy('gzip')
 interactive = PipePy('python', 'interactive.py')
@@ -21,6 +22,12 @@ interactive2 = PipePy('python', 'interactive2.py')
 print("# Simple command\n")
 rprint("    >>> demo()")
 r = demo()
+rprint(f"    <<< {r!r}")
+print()
+
+print("# Iterate over results of command\n")
+rprint("    >>> [name.upper() for name in ls]")
+r = [name.upper() for name in ls]
 rprint(f"    <<< {r!r}")
 print()
 
@@ -64,7 +71,7 @@ r = demo | (lambda returncode, output, errors: (returncode + 100,
 rprint(f"    <<< {r!r}")
 print()
 
-print("# Pipe command to function with file arguments")
+print("# Pipe command to function with file arguments\n")
 rprint("    >>> def callback(stdout, stderr):\n"
        "    ...     return stdout.read().upper(), stderr.read().upper()\n"
        "    >>> demo | callback")
