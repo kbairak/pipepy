@@ -1,0 +1,54 @@
+name: Test and publish
+
+on: [push]
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, pypy-3.7]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install .
+          python -m pip install -r test_requirements.txt
+          python -m pip install flake8
+          python -m pip install isort
+      - name: Run flake8
+        run: flake8
+      - name: Run isort
+        run: isort .
+      - name: Test with pytest
+        run: make _covtest
+
+  publish:
+    needs: [test]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.9
+      - name: Check that tag matches package version
+        run: |
+          python -m pip install .
+          python check_tag.py
+      - name: Build and publish package
+        run: |
+          python -m pip install --upgrade build
+          python -m pip install --upgrade twine
+          python -m build
+          python -m twine upload dist/*
+        env:
+          TWINE_USERNAME: '__token__'
+          TWINE_PASSWORD: ${{secrets.PYPI_API_TOKEN}}

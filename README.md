@@ -328,10 +328,9 @@ if git.diff(name_only=True) | grep('readme.txt'):
       print("readme was changed")
 ```
 
-If the left operand was previously evaluated, then it's output (`stdout` and
-`stderr`) will be passed directly as inputs to the right operand. Otherwise,
-both commands will be executed in parallel and `left`'s output will be streamed
-into `right`.
+If the left operand was previously evaluated, then it's output (`stdout`) will
+be passed directly as inputs to the right operand. Otherwise, both commands
+will be executed in parallel and `left`'s output will be streamed into `right`.
 
 ### 2. Left operand is a string
 
