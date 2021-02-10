@@ -10,10 +10,12 @@ build: clean
 test:
 	pytest
 
-covtest:
+_covtest:
 	pytest --cov=src/pipepy --cov-report=term-missing
+
+covtest: _covtest
 	coverage html
-	xdg-open htmlcov/index.html
+	firefox htmlcov/index.html
 
 watchtest:
 	pytest-watch

@@ -10,9 +10,9 @@ def test_converts_to_str():
 
 
 def test_glob():
-    assert (PipePy('src/tests/playground/globtest*')._args ==
-            ['src/tests/playground/globtest1',
-             'src/tests/playground/globtest2'])
+    assert (sorted(PipePy('src/tests/playground/globtest*')._args) ==
+            sorted(['src/tests/playground/globtest1',
+                    'src/tests/playground/globtest2']))
 
 
 def test_kwargs():
