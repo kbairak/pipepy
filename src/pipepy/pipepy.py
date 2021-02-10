@@ -54,6 +54,8 @@ class PipePy:
         self._text = _text
         self._encoding = _encoding
         self._stdin_close_pending = False
+
+        self._process = None  # To be used with background processes
         self._context = None  # To be used with `with` statements
 
         self._returncode = None
@@ -271,13 +273,14 @@ class PipePy:
         if self._wait:
             self.wait()
 
-    def wait(self):
+    def wait(self, timeout=None):
         if isinstance(self._stdin, (bytes, str)):
             stdin = self._stdin
         else:
             stdin = None
-        self._stdout, self._stderr = self._process.communicate(stdin)
-        self._returncode = self._process.wait()
+        self._stdout, self._stderr = self._process.communicate(stdin, timeout)
+        self._returncode = self._process.wait(timeout)
+        self._process = None
 
     # Get results
     @property
@@ -579,3 +582,17 @@ class PipePy:
             self._context = None
         else:
             self.wait()
+
+    # Forward calls to background process
+
+    def _map_to_background_process(method):
+        def func(self, *args, **kwargs):
+            if self._process is None:
+                raise TypeError(f"Cannot call '{method}' on non-background "
+                                f"process")
+            getattr(self._process, method)(*args, **kwargs)
+        return func
+
+    send_signal = _map_to_background_process('send_signal')
+    terminate = _map_to_background_process('terminate')
+    kill = _map_to_background_process('kill')
