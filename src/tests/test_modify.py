@@ -46,3 +46,6 @@ def test_modifiers():
     ls_stream = +PipePy('ls')
     assert ls_stream._stream_stdout
     assert ls_stream._stream_stderr
+    assert ls_stream.stdout is None
+    assert ls_stream.stderr is None
+    assert ls_stream

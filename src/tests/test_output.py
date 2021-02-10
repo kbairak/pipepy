@@ -22,8 +22,7 @@ def test_bool():
 
 def test_str():
     assert str(echo("hello world")) == "hello world\n"
-    assert str(echo("hello world")) == "hello world\n"
-    assert str(echo("καλημέρα", _text=False)) == "καλημέρα\n"
+    assert str(~echo("καλημέρα")) == "καλημέρα\n"
     assert (str("καλημέρα".encode('iso-8859-7') |
                 cat(_text=False, _encoding='iso-8859-7')) ==
             "καλημέρα")
