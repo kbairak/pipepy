@@ -56,6 +56,8 @@ class PipePy:
         self._wait = _wait
         self._text = _text
         self._encoding = _encoding
+        self._stdin_close_pending = False
+        self._context = None  # To be used with `with` statements
 
         self._returncode = None
         self._stdout = None
@@ -356,13 +358,16 @@ class PipePy:
                 ...     print(ls.upper())
         """
 
-        command = -self
-        yield from command._process.stdout
+        if self._stdout is not None:
+            yield from str(self).splitlines()
+        else:
+            command = -self
+            for line in command._process.stdout:
+                yield line
 
     def iter_words(self):
         for line in self:
-            for word in line.split():
-                yield word
+            yield from iter(line.split())
 
     def __repr__(self):
         if INTERACTIVE:
@@ -404,7 +409,12 @@ class PipePy:
                 >>> ps > 'progs.txt'
         """
 
-        with open(filename, 'wb') as f:
+        if self._text:
+            mode = "w"
+        else:
+            mode = "wb"
+
+        with open(filename, mode, encoding=self._encoding) as f:
             f.write(self.stdout)
 
     def __rshift__(self, filename):
@@ -416,7 +426,12 @@ class PipePy:
                 >>> ps >> 'progs/txt'
         """
 
-        with open(filename, 'ab') as f:
+        if self._text:
+            mode = "a"
+        else:
+            mode = "ab"
+
+        with open(filename, mode, encoding=self._encoding) as f:
             f.write(self.stdout)
 
     def __lt__(self, filename):
@@ -428,8 +443,13 @@ class PipePy:
                 >>> grep('python') < 'progs.txt'
         """
 
-        with open(filename, 'rb') as f:
-            return self(_stdin=f)
+        if self._text:
+            mode = "r"
+        else:
+            mode = "rb"
+
+        with open(filename, mode, encoding=self._encoding) as f:
+            return (iter(f) | self)
 
     def __or__(left, right):
         return PipePy._pipe(left, right)
@@ -552,9 +572,13 @@ class PipePy:
     # Context processor
     def __enter__(self):
         if self._wait:
-            raise TypeError("Context processors only work with background "
-                            "commands")
+            self._context = -self
+            return self._context.__enter__()
         return self._process.stdin, self._process.stdout, self._process.stderr
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.wait()
+        if self._context is not None:
+            self._context.wait()
+            self._context = None
+        else:
+            self.wait()

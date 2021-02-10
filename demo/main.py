@@ -98,7 +98,7 @@ print("# Context processor\n")
 
 code = """
     >>> result = []
-    ... with -interactive as (stdin, stdout, stderr):
+    ... with interactive as (stdin, stdout, stderr):
     ...     try:
     ...         stdout = iter(stdout)
     ...         while True:
@@ -116,7 +116,7 @@ code = """
 
 rprint(code)
 r = []
-with -interactive as (stdin, stdout, stderr):
+with interactive as (stdin, stdout, stderr):
     try:
         stdout = iter(stdout)
         while True:
@@ -134,7 +134,7 @@ print()
 
 code = """
     <<< result = []
-    <<< with -interactive2 as (stdin, stdout, stderr):
+    <<< with interactive2 as (stdin, stdout, stderr):
     ...     stdout = iter((line for line in stdout if line.strip()))
     ...     for _ in range(3):
     ...         a = random.randint(5, 10)
@@ -157,7 +157,7 @@ code = """
 rprint(code)
 
 r = []
-with -interactive2 as (stdin, stdout, stderr):
+with interactive2 as (stdin, stdout, stderr):
     stdout = iter((line for line in stdout if line.strip()))
     for _ in range(3):
         a = random.randint(5, 10)

@@ -4,7 +4,7 @@ A Python library for invoking and interacting with shell commands.
 
 <!--ts-->
 * [Why? Comparison with other similar frameworks](#why-comparison-with-other-similar-frameworks)
-* [Installation](#installation)
+* [Installation and testing](#installation-and-testing)
 * [Intro, basic usage](#intro-basic-usage)
 * [Laziness](#laziness)
 * [Customizing commands](#customizing-commands)
@@ -20,10 +20,11 @@ A Python library for invoking and interacting with shell commands.
    * [3. Reading data from and writing data to a command](#3-reading-data-from-and-writing-data-to-a-command)
 * [Binary mode](#binary-mode)
 * [Streaming to console](#streaming-to-console)
+* [Utils](#utils)
 * ["Interactive" mode](#interactive-mode)
 * [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Tue Feb  9 11:11:29 PM EET 2021 -->
+<!-- Added by: kbairak, at: Wed Feb 10 12:13:31 PM EET 2021 -->
 
 <!--te-->
 
@@ -44,10 +45,10 @@ A Python library for invoking and interacting with shell commands.
    - It tries to apply more syntactic sugar to make the invocations feel more
      like shell invocations.
 
-   - It tries to offer ways to have shell commands interact with python
-     functions in powerful and intuitive ways.
+   - It tries to offer ways to have shell commands interact with python code in
+     powerful and intuitive ways.
 
-## Installation
+## Installation and testing
 
 ```sh
 python -m pip install pipepy
@@ -61,6 +62,24 @@ git clone https://github.com/kbairak/pipepy
 cd pipepy
 python -m pip install  -e .
 ```
+
+To run the tests, you need to first install the testing requirements:
+
+```sh
+python -m pip install -r test_requirements.txt
+
+make test
+# or
+pytest
+```
+
+There are a few more `make` targets to assist with testing during development:
+
+- `covtest`: Produces and opens a coverage report
+- `watchtest`: Listens for changes in the source code files and reruns the
+  tests automatically
+- `debugtest`: Runs the tests without capturing their output so that you can
+  insert a debug statement
 
 ## Intro, basic usage
 
@@ -144,9 +163,10 @@ following ways:
   ```python
   from pipepy import ps
   list(ps.iter_words())
-  # <<< ['PID', 'TTY', 'TIME', 'CMD', '11439', 'pts/5', '00:00:00', 'zsh',
-  # ...  '15532', 'pts/5', '00:00:10', 'ptipython', '15539', 'pts/5',
-  # ...  '00:00:00', 'ps']
+  # <<< ['PID', 'TTY', 'TIME', 'CMD',
+  # ...  '11439', 'pts/5', '00:00:00', 'zsh',
+  # ...  '15532', 'pts/5', '00:00:10', 'ptipython',
+  # ...  '15539', 'pts/5', '00:00:00', 'ps']
   ```
 
 - Redirecting the output to something else (this will be further explained
@@ -492,7 +512,7 @@ from pipepy import ping
 
 start = time.time()
 for line in ping('-c', 3, 'google.com'):
-    print(time.time() - start, line.upper(), end="")
+    print(time.time() - start, line.strip().upper())
 # <<< 0.15728354454040527 PING GOOGLE.COM (172.217.169.142) 56(84) BYTES OF DATA.
 # ... 0.1574106216430664  64 BYTES FROM SOF02S32-IN-F14.1E100.NET (172.217.169.142): ICMP_SEQ=1 TTL=103 TIME=71.8 MS
 # ... 1.1319730281829834  64 BYTES FROM 142.169.217.172.IN-ADDR.ARPA (172.217.169.142): ICMP_SEQ=2 TTL=103 TIME=75.3 MS
@@ -533,14 +553,14 @@ with a `with` statement:
 from pipepy import math_quiz
 
 result = []
-with -math_quiz as (stdin, stdout, stderr):
-    stdout = iter((line for line in stdout if line.strip()))
+with math_quiz as (stdin, stdout, stderr):
+    stdout = (line.strip() for line in stdout if line.strip())
     try:
         for _ in range(3)
             question = next(stdout)
             a, _, b, _ = question.split()
-            answer = str(int(a) + int(b)) + "\n"
-            stdin.write(answer)
+            answer = str(int(a) + int(b))
+            stdin.write(answer + "\n")
             stdin.flush()
             verdict = next(stdout)
             result.append((question, answer, verdict))
@@ -548,26 +568,32 @@ with -math_quiz as (stdin, stdout, stderr):
         pass
 
 result
-# <<< [('10 + 7 ?\n', '17\n', 'Correct!\n'),
-# ...  ('5 + 5 ?\n', '10\n', 'Correct!\n'),
-# ...  ('5 + 5 ?\n', '10\n', 'Correct!\n')]
+# <<< [('10 + 7 ?', '17', 'Correct!'),
+# ...  ('5 + 5 ?', '10', 'Correct!'),
+# ...  ('5 + 5 ?', '10', 'Correct!')]
 ```
 
 `stdin`, `stdout` and `stderr` are the open file streams of the background
 process. When the body of the `with` block finishes, an EOF is sent to the
 process and it is waited for.
 
-_When using this syntax, you **have** to prepend the command with a `-` to set
-it to run in the background. What's more, after the `with` statement you can
-inspect it for truthiness:_
+You need to remember to end lines fed to `stdin` with a newline character if
+the command expects it.
+
+If you want to capture the `returncode` of the command after the `with` block
+finishes, you must call it on a background command, which will have been waited
+for when the block ends:
+
 
 ```python
 from pipepy import math_quiz
 
-job = -math_quiz
-with job as (stdin, stdout, stderr):
+command = -math_quiz
+
+with command as (stdin, stdout, stderr):
     ...
-if job:
+
+if command:  # No need to `command.wait()`
     print("Math quiz successful")
 else:
     print("Math quiz failed")
@@ -687,6 +713,13 @@ else:
      print("Download failed")
 ```
 
+## Utils
+
+Since changing the current working directory or the environment in a subprocess
+has no effect on the current process, we include the `pipepy.cd` and
+`pipepy.export` functions. These are not `PipePy` instances but simple aliases
+to `os.chdir` and `os.environ.__setitem__` respectively.
+
 ## "Interactive" mode
 
 When "interactive" mode is set, the `__repr__` method will simply return
@@ -713,11 +746,12 @@ ls -l
 ```
 ## TODOs
 
-- [ ] Think of more syntactic sugar (find a use for decorators/context
+- [x] Think of more syntactic sugar (find a use for decorators/context
       processors?)
 - [ ] Interact with background process via stdin and/or signals
-- [ ] Reorganize code
-- [ ] Tests!!! (include pypy?)
+- [x] Reorganize code
+- [x] Tests!!! (include pypy?)
 - [ ] Github actions build
 - [ ] Add docstrings
 - [ ] Stream and capture `stdout` and `stderr`
+- [ ] Ability to source bash files

@@ -2,3 +2,5 @@ src/pipepy.egg-info
 tags
 build
 dist
+.coverage
+htmlcov

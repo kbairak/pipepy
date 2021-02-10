@@ -4,9 +4,6 @@ import string
 
 from .pipepy import PipePy
 
-cd = os.chdir
-export = os.environ.__setattr__
-
 
 def overload_chars(locals_):
     """ Assigns all ascii characters as values to keys of the same name in the
@@ -38,3 +35,6 @@ for path in os.get_exec_path():
         if 'x' in stat_.filemode(
                 os.lstat(os.path.join(path, original_name)).st_mode):
             locals()[name] = PipePy(original_name)
+
+cd = os.chdir
+export = os.environ.__setitem__
