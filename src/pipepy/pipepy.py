@@ -29,9 +29,6 @@ class PipePy:
             <<< True
     """
 
-    class _NONE:
-        pass
-
     def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=False,
                  _stream_stderr=False, _wait=True, _text=True,
                  _encoding="utf8", **kwargs):
@@ -64,9 +61,9 @@ class PipePy:
         self._stderr = None
 
     # Customizing instance
-    def __call__(self, *args, _stdin=_NONE, _stream_stdout=_NONE,
-                 _stream_stderr=_NONE, _wait=_NONE, _text=_NONE,
-                 _encoding=_NONE, **kwargs):
+    def __call__(self, *args, _stdin=None, _stream_stdout=None,
+                 _stream_stderr=None, _wait=None, _text=None,
+                 _encoding=None, **kwargs):
         """ Make and return a copy of `self` overriding some of it's
             initialization arguments. Also, if `__call__` is called with no
             arguments, an evaluation will be forced on the returned copy.
@@ -83,26 +80,26 @@ class PipePy:
 
         force = (not args and
                  not kwargs and
-                 _stdin is self._NONE and
-                 _stream_stdout is self._NONE and
-                 _stream_stderr is self._NONE and
-                 _wait is self._NONE and
-                 _text is self._NONE and
-                 _encoding is self._NONE)
+                 _stdin is None and
+                 _stream_stdout is None and
+                 _stream_stderr is None and
+                 _wait is None and
+                 _text is None and
+                 _encoding is None)
 
         args = self._args + list(args)
 
-        if _stdin is self._NONE:
+        if _stdin is None:
             _stdin = self._stdin
-        if _stream_stdout is self._NONE:
+        if _stream_stdout is None:
             _stream_stdout = self._stream_stdout
-        if _stream_stderr is self._NONE:
+        if _stream_stderr is None:
             _stream_stderr = self._stream_stderr
-        if _wait is self._NONE:
+        if _wait is None:
             _wait = self._wait
-        if _text is self._NONE:
+        if _text is None:
             _text = self._text
-        if _encoding is self._NONE:
+        if _encoding is None:
             _encoding = self._encoding
 
         result = self.__class__(*args,
