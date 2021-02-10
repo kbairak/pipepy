@@ -3,7 +3,6 @@ import random
 
 from pipepy import PipePy
 
-
 student_command = PipePy('python', 'src/tests/playground/math_quiz_student.py')
 teacher_command = PipePy('python', 'src/tests/playground/math_quiz_teacher.py')
 

@@ -1,5 +1,7 @@
 A Python library for invoking and interacting with shell commands.
 
+![Build](https://github.com/kbairak/pipepy/workflows/Test%20suite/badge.svg)
+
 ## Table of contents
 
 <!--ts-->
@@ -578,7 +580,8 @@ process. When the body of the `with` block finishes, an EOF is sent to the
 process and it is waited for.
 
 You need to remember to end lines fed to `stdin` with a newline character if
-the command expects it.
+the command expects it. Also, don't forget to call `stdin.flush()` every now
+and then.
 
 If you want to capture the `returncode` of the command after the `with` block
 finishes, you must call it on a background command, which will have been waited

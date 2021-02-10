@@ -37,12 +37,14 @@ def test_as_table():
 def test_iter():
     assert list(echo("a\nb\nc")) == ["a\n", "b\n", "c\n"]
 
-    start = time.time()
+    tic = time.time()
+    delay = .01
     for i, line in enumerate(echo_messages(count=3,
-                                           delay=.1,
+                                           delay=delay,
                                            message='hello world {}')):
-        diff = time.time() - start
-        assert i * .1 < diff < (i + 1) * .1
+        toc = time.time()
+        assert toc - tic > delay  # Verify that the message is indeed delayed
+        tic = toc
         assert line.strip() == f"hello world {i}"
 
     assert list(echo('a', 'b', 'c').iter_words()) == ["a", "b", "c"]

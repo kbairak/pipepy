@@ -1,5 +1,5 @@
-import reprlib
 import inspect
+import reprlib
 import subprocess
 from glob import glob
 
