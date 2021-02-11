@@ -150,23 +150,15 @@ class PipePy:
                 >>> git('status')
         """
 
-        return self.__class__(*(self._args + [attr]), _lazy=False)
-
-    def __invert__(self):
-        """ Set binary mode:
-
-            Usage:
-
-                >>> (ls | ~gzip)()
-        """
-
-        return self(_text=False)
-
-    def __neg__(self):
-        return self(_wait=False)()
-
-    def __pos__(self):
-        return self(_stream_stdout=True, _stream_stderr=True)
+        # Can't use poperties here because properties aren't callable
+        if attr == "_s":  # Short for **s**tream
+            return self(_stream_stdout=True, _stream_stderr=True)
+        elif attr == "_b":  # Short for **b**inary
+            return self(_text=False)
+        elif attr == "_d":  # Short for **d**aemon
+            return self(_wait=False)
+        else:
+            return self.__class__(*(self._args + [attr]), _lazy=False)
 
     @staticmethod
     def _convert_args(args, kwargs):
@@ -361,7 +353,7 @@ class PipePy:
         if self._stdout is not None:
             yield from str(self).splitlines()
         else:
-            command = -self
+            command = self._d()
             for line in command._process.stdout:
                 yield line
 
@@ -501,7 +493,7 @@ class PipePy:
                 if left._stdout is not None:
                     stdin = left._stdout
                 else:
-                    left = -left
+                    left = left._d()
                     stdin = left._process.stdout
                 result = right(_stdin=stdin)
                 return result
@@ -521,7 +513,7 @@ class PipePy:
                                  'output': left.stdout,
                                  'errors': left.stderr}
                 elif keys <= {'stdout', 'stderr'}:
-                    left = -left
+                    left = left._d()
                     arguments = {'stdout': left._process.stdout,
                                  'stderr': left._process.stderr}
                 else:
@@ -549,7 +541,7 @@ class PipePy:
                     pass
             return right(_stdin=left)
         elif left_is_iterable:
-            right = -right
+            right = right._d()
             for chunk in left:
                 if right._text:
                     try:
@@ -572,7 +564,7 @@ class PipePy:
     # Context processor
     def __enter__(self):
         if self._wait:
-            self._context = -self
+            self._context = self._d()
             return self._context.__enter__()
         return self._process.stdin, self._process.stdout, self._process.stderr
 

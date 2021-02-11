@@ -6,38 +6,38 @@ DEFAULT_PYMAKE_TARGET = "test"
 
 
 def test():
-    (+pytest)()
+    pytest._s()
 
 
 def covtest():
-    (+pytest(cov="src/pipepy", cov_report="term-missing"))()
+    pytest(cov="src/pipepy", cov_report="term-missing")._s()
 
 
 def covtest_and_show(covtest):
-    (+coverage.html)()
-    (+firefox("htmlcov/index.html"))()
+    coverage.html._s()
+    firefox("htmlcov/index.html")._s()
 
 
 def watchtest():
-    (+pytest_watch)()
+    pytest_watch._s()
 
 
 def debugtest():
-    (+(pytest - 's'))()
+    pytest('-s')._s()
 
 
 def checks():
-    (+flake8)()
-    (+isort)()
+    flake8._s()
+    isort._s()
 
 
 def clean():
-    (+(rm - 'r' - 'f')("build", "dist"))()
+    rm('-rf', "build", "dist")._s()
 
 
 def build(clean):
-    (+python('-m', "build"))()
+    python('-m', "build")._s()
 
 
 def publish(build):
-    (+python('-m', "twine").upload("dist/*"))()
+    python('-m', "twine").upload("dist/*")._s()
