@@ -1,6 +1,6 @@
 import time
 
-from pipepy import PipePy, cat, echo, false, rm, true
+from pipepy import PipePy, cat, echo, false, ls, rm, set_always_stream, true
 
 echo_messages = PipePy('python', 'src/tests/playground/echo_messages.py')
 
@@ -63,3 +63,24 @@ def test_redirects():
     assert str(cat < filename).strip() == "hello world\nhello world"
 
     rm(filename)()
+
+
+def test_streams():
+    result = ls._s()
+    assert result
+    assert result._stdout is None
+    assert result._stderr is None
+
+    set_always_stream(True)
+    result = ls()
+    assert result
+    assert result._stdout is None
+    assert result._stderr is None
+
+    result = ls._c()
+    assert result
+    assert result._stdout
+    assert result._stderr is not None
+    assert not result._stderr
+
+    set_always_stream(False)

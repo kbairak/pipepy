@@ -1,43 +1,45 @@
 from pipepy import (coverage, firefox, flake8, isort, pytest, pytest_watch,
-                    python, rm)
+                    python, rm, set_always_stream)
+
+set_always_stream(True)
 
 
 DEFAULT_PYMAKE_TARGET = "test"
 
 
 def test():
-    pytest._s()
+    pytest()
 
 
 def covtest():
-    pytest(cov="src/pipepy", cov_report="term-missing")._s()
+    pytest(cov="src/pipepy", cov_report="term-missing")()
 
 
 def covtest_and_show(covtest):
-    coverage.html._s()
-    firefox("htmlcov/index.html")._s()
+    coverage.html()
+    firefox("htmlcov/index.html")()
 
 
 def watchtest():
-    pytest_watch._s()
+    pytest_watch()
 
 
 def debugtest():
-    pytest('-s')._s()
+    pytest('-s')()
 
 
 def checks():
-    flake8._s()
-    isort._s()
+    flake8()
+    isort()
 
 
 def clean():
-    rm('-rf', "build", "dist")._s()
+    rm('-rf', "build", "dist")()
 
 
 def build(clean):
-    python('-m', "build")._s()
+    python('-m', "build")()
 
 
 def publish(build):
-    python('-m', "twine").upload("dist/*")._s()
+    python('-m', "twine").upload("dist/*")()

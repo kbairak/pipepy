@@ -708,6 +708,29 @@ else:
      print("Download failed")
 ```
 
+You can call `pipepy.set_always_stream(True)` to make streaming to the console
+the default behavior. This may be desirable in some situations, like Makefiles
+(see [below](#pymake)).
+
+```python
+from pipepy import set_always_stream, ls
+set_always_stream(True)
+ls()  # Alsost equivalent to `ls._s()`
+set_always_stream(False)
+```
+
+Similarly to how `._s` forces a command to stream its output to the console,
+`._c` (mnemonic **c**apture) forces it to capture its output even if
+`set_always_stream` has been called:
+
+```python
+from pipepy import set_always_stream, ls
+set_always_stream(True)
+ls()     # Will stream its output
+ls._c()  # Will capture its output
+set_always_stream(False)
+```
+
 ## Utils
 
 Since changing the current working directory or the environment in a subprocess
@@ -828,5 +851,6 @@ def test():
 - [ ] Ability to source bash files
 - [ ] Python virtual environments
 - [x] `make` alternative
-- [ ] Option to make `_stream_stdout/err` the default (and to reverse it with
+- [x] Option to make `_stream_stdout/err` the default (and to reverse it with
       `_s`)
+- [ ] Context processors for `cd` and/or environment

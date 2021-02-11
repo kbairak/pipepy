@@ -4,11 +4,17 @@ import subprocess
 from glob import glob
 
 INTERACTIVE = False
+ALWAYS_STREAM = False
 
 
 def set_interactive(value):
     global INTERACTIVE
     INTERACTIVE = value
+
+
+def set_always_stream(value):
+    global ALWAYS_STREAM
+    ALWAYS_STREAM = value
 
 
 class PipePy:
@@ -29,8 +35,8 @@ class PipePy:
             <<< True
     """
 
-    def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=False,
-                 _stream_stderr=False, _wait=True, _text=True,
+    def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=None,
+                 _stream_stderr=None, _wait=True, _text=True,
                  _encoding="utf8", **kwargs):
         """ Initialize a PipePy object.
 
@@ -153,6 +159,8 @@ class PipePy:
         # Can't use poperties here because properties aren't callable
         if attr == "_s":  # Short for **s**tream
             return self(_stream_stdout=True, _stream_stderr=True)
+        elif attr == "_c":  # Short for **c**apture
+            return self(_stream_stdout=False, _stream_stderr=False)
         elif attr == "_b":  # Short for **b**inary
             return self(_text=False)
         elif attr == "_d":  # Short for **d**aemon
@@ -248,12 +256,18 @@ class PipePy:
         else:
             stdin = None
 
-        if self._stream_stdout:
+        _stream_stdout = self._stream_stdout
+        if _stream_stdout is None:
+            _stream_stdout = ALWAYS_STREAM
+        if _stream_stdout:
             stdout = None
         else:
             stdout = subprocess.PIPE
 
-        if self._stream_stderr:
+        _stream_stderr = self._stream_stderr
+        if _stream_stderr is None:
+            _stream_stderr = ALWAYS_STREAM
+        if _stream_stderr:
             stderr = None
         else:
             stderr = subprocess.PIPE
