@@ -750,10 +750,14 @@ ls -l
 
 - [x] Think of more syntactic sugar (find a use for decorators/context
       processors?)
-- [ ] Interact with background process via stdin and/or signals
+- [x] Interact with background process via stdin and/or signals
 - [x] Reorganize code
 - [x] Tests!!! (include pypy?)
-- [ ] Github actions build
+- [x] Github actions build
 - [ ] Add docstrings
 - [ ] Stream and capture `stdout` and `stderr`
 - [ ] Ability to source bash files
+- [ ] Python virtual environments
+- [ ] `make` alternative
+- [ ] Option to make `_stream_stdout/err` the default (and to reverse it with
+      `+`)
