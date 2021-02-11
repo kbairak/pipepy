@@ -16,16 +16,16 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Run checks
-        run: |
-          python -m pip install flake8
-          python -m pip install isort
-          make checks
-      - name: Test with pytest
+      - name: Install dependencies
         run: |
           python -m pip install .
           python -m pip install -r test_requirements.txt
-          make covtest
+          python -m pip install flake8
+          python -m pip install isort
+      - name: Run checks
+        run: pymake checks
+      - name: Test with pytest
+        run: pymake covtest
 
   publish:
     needs: [test]
@@ -37,15 +37,15 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: 3.9
-      - name: Check that tag matches package version
+      - name: Install dependencies
         run: |
           python -m pip install .
-          python check_tag.py
-      - name: Build and publish package
-        run: |
           python -m pip install --upgrade build
           python -m pip install --upgrade twine
-          make publish
+      - name: Check that tag matches package version
+        run: python check_tag.py
+      - name: Build and publish package
+        run: pymake publish
         env:
           TWINE_USERNAME: '__token__'
           TWINE_PASSWORD: ${{secrets.PYPI_API_TOKEN}}

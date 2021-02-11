@@ -92,7 +92,7 @@ def test_math_quiz_student_command_stops_first():
 
 
 def test_inspect_result():
-    job = -teacher_command
+    job = teacher_command._d()
     with job as (stdin, stdout, stderr):
         python_student(stdin, stdout, range(3))
 

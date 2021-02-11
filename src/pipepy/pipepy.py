@@ -3,12 +3,26 @@ import reprlib
 import subprocess
 from glob import glob
 
+from .exceptions import PipePyError
+
 INTERACTIVE = False
+ALWAYS_STREAM = False
+ALWAYS_RAISE = False
 
 
 def set_interactive(value):
     global INTERACTIVE
     INTERACTIVE = value
+
+
+def set_always_stream(value):
+    global ALWAYS_STREAM
+    ALWAYS_STREAM = value
+
+
+def set_always_raise(value):
+    global ALWAYS_RAISE
+    ALWAYS_RAISE = value
 
 
 class PipePy:
@@ -29,9 +43,9 @@ class PipePy:
             <<< True
     """
 
-    def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=False,
-                 _stream_stderr=False, _wait=True, _text=True,
-                 _encoding="utf8", **kwargs):
+    def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=None,
+                 _stream_stderr=None, _wait=True, _text=True,
+                 _encoding="utf8", _raises_exception=None, **kwargs):
         """ Initialize a PipePy object.
 
             `args` and `kwargs` will determine the command line arguments
@@ -53,6 +67,7 @@ class PipePy:
         self._wait = _wait
         self._text = _text
         self._encoding = _encoding
+        self._raises_exception = _raises_exception
         self._stdin_close_pending = False
 
         self._process = None  # To be used with background processes
@@ -65,7 +80,7 @@ class PipePy:
     # Customizing instance
     def __call__(self, *args, _stdin=None, _stream_stdout=None,
                  _stream_stderr=None, _wait=None, _text=None,
-                 _encoding=None, **kwargs):
+                 _encoding=None, _raises_exception=None, **kwargs):
         """ Make and return a copy of `self` overriding some of it's
             initialization arguments. Also, if `__call__` is called with no
             arguments, an evaluation will be forced on the returned copy.
@@ -87,7 +102,8 @@ class PipePy:
                  _stream_stderr is None and
                  _wait is None and
                  _text is None and
-                 _encoding is None)
+                 _encoding is None and
+                 _raises_exception is None)
 
         args = self._args + list(args)
 
@@ -103,6 +119,8 @@ class PipePy:
             _text = self._text
         if _encoding is None:
             _encoding = self._encoding
+        if _raises_exception is None:
+            _raises_exception = self._raises_exception
 
         result = self.__class__(*args,
                                 _lazy=True,
@@ -112,6 +130,7 @@ class PipePy:
                                 _wait=_wait,
                                 _text=_text,
                                 _encoding=_encoding,
+                                _raises_exception=_raises_exception,
                                 **kwargs)
 
         if force:
@@ -150,23 +169,21 @@ class PipePy:
                 >>> git('status')
         """
 
-        return self.__class__(*(self._args + [attr]), _lazy=False)
-
-    def __invert__(self):
-        """ Set binary mode:
-
-            Usage:
-
-                >>> (ls | ~gzip)()
-        """
-
-        return self(_text=False)
-
-    def __neg__(self):
-        return self(_wait=False)()
-
-    def __pos__(self):
-        return self(_stream_stdout=True, _stream_stderr=True)
+        # Can't use poperties here because properties aren't callable
+        if attr == "_s":  # Short for Stream
+            return self(_stream_stdout=True, _stream_stderr=True)
+        elif attr == "_c":  # Short for Capture
+            return self(_stream_stdout=False, _stream_stderr=False)
+        elif attr == "_b":  # Short for Binary
+            return self(_text=False)
+        elif attr == "_d":  # Short for Daemon
+            return self(_wait=False)
+        elif attr == "_r":  # Short for Raise
+            return self(_raises_exception=True)
+        elif attr == "_q":  # Short for Quiet
+            return self(_raises_exception=False)
+        else:
+            return self.__class__(*(self._args + [attr]), _lazy=False)
 
     @staticmethod
     def _convert_args(args, kwargs):
@@ -256,12 +273,18 @@ class PipePy:
         else:
             stdin = None
 
-        if self._stream_stdout:
+        _stream_stdout = self._stream_stdout
+        if _stream_stdout is None:
+            _stream_stdout = ALWAYS_STREAM
+        if _stream_stdout:
             stdout = None
         else:
             stdout = subprocess.PIPE
 
-        if self._stream_stderr:
+        _stream_stderr = self._stream_stderr
+        if _stream_stderr is None:
+            _stream_stderr = ALWAYS_STREAM
+        if _stream_stderr:
             stderr = None
         else:
             stderr = subprocess.PIPE
@@ -281,6 +304,12 @@ class PipePy:
         self._stdout, self._stderr = self._process.communicate(stdin, timeout)
         self._returncode = self._process.wait(timeout)
         self._process = None
+
+        raises_exception = self._raises_exception
+        if raises_exception is None:
+            raises_exception = ALWAYS_RAISE
+        if raises_exception:
+            self.raise_for_returncode()
 
     # Get results
     @property
@@ -361,13 +390,17 @@ class PipePy:
         if self._stdout is not None:
             yield from str(self).splitlines()
         else:
-            command = -self
+            command = self._d()
             for line in command._process.stdout:
                 yield line
 
     def iter_words(self):
         for line in self:
             yield from iter(line.split())
+
+    def raise_for_returncode(self):
+        if self._returncode != 0:
+            raise PipePyError(self._returncode, self._stdout, self._stderr)
 
     def __repr__(self):
         if INTERACTIVE:
@@ -501,7 +534,7 @@ class PipePy:
                 if left._stdout is not None:
                     stdin = left._stdout
                 else:
-                    left = -left
+                    left = left._d()
                     stdin = left._process.stdout
                 result = right(_stdin=stdin)
                 return result
@@ -521,7 +554,7 @@ class PipePy:
                                  'output': left.stdout,
                                  'errors': left.stderr}
                 elif keys <= {'stdout', 'stderr'}:
-                    left = -left
+                    left = left._d()
                     arguments = {'stdout': left._process.stdout,
                                  'stderr': left._process.stderr}
                 else:
@@ -549,7 +582,7 @@ class PipePy:
                     pass
             return right(_stdin=left)
         elif left_is_iterable:
-            right = -right
+            right = right._d()
             for chunk in left:
                 if right._text:
                     try:
@@ -572,7 +605,7 @@ class PipePy:
     # Context processor
     def __enter__(self):
         if self._wait:
-            self._context = -self
+            self._context = self._d()
             return self._context.__enter__()
         return self._process.stdin, self._process.stdout, self._process.stderr
 
