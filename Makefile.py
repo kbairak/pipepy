@@ -5,7 +5,7 @@ set_always_stream(True)
 set_always_raise(True)
 
 
-DEFAULT_PYMAKE_TARGET = "test"
+DEFAULT_PYMAKE_TARGET = "watchtest"
 
 
 def test():
@@ -16,7 +16,7 @@ def covtest():
     pytest(cov="src/pipepy", cov_report="term-missing")()
 
 
-def covtest_and_show(covtest):
+def html(covtest):
     coverage.html()
     firefox("htmlcov/index.html")()
 
