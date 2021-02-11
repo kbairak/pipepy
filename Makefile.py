@@ -1,5 +1,4 @@
-from pipepy import (coverage, firefox, flake8, isort, pytest, pytest_watch,
-                    python, rm, set_always_stream, set_always_raise)
+from pipepy import python, rm, set_always_raise, set_always_stream
 
 set_always_stream(True)
 set_always_raise(True)
@@ -9,27 +8,33 @@ DEFAULT_PYMAKE_TARGET = "watchtest"
 
 
 def test():
+    from pipepy import pytest
     pytest()
 
 
 def covtest():
+    from pipepy import pytest
     pytest(cov="src/pipepy", cov_report="term-missing")()
 
 
 def html(covtest):
+    from pipepy import coverage, firefox
     coverage.html()
     firefox("htmlcov/index.html")()
 
 
 def watchtest():
+    from pipepy import pytest_watch
     pytest_watch()
 
 
 def debugtest():
+    from pipepy import pytest
     pytest('-s')()
 
 
 def checks():
+    from pipepy import flake8, isort
     flake8()
     isort()
 

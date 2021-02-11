@@ -901,17 +901,10 @@ def test():
 
 ## TODOs
 
-- [x] Think of more syntactic sugar (find a use for decorators/context
-      processors?)
-- [x] Interact with background process via stdin and/or signals
-- [x] Reorganize code
-- [x] Tests!!! (include pypy?)
-- [x] Github actions build
-- [ ] Add docstrings
-- [ ] Stream and capture `stdout` and `stderr`
 - [ ] Ability to source bash files
-- [ ] Python virtual environments
-- [x] `make` alternative
-- [x] Option to make `_stream_stdout/err` the default (and to reverse it with
-      `_s`)
+- [ ] Pass arguments to `pymake` (see what other tricks `make` does for
+      inspiration)
 - [ ] Context processors for `cd` and/or environment
+- [ ] Add more docstrings
+- [ ] Stream and capture `stdout` and `stderr` at the same time
+- [ ] Python virtual environments (maybe sourcing bash files will suffice)
