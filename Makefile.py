@@ -1,7 +1,8 @@
-from pipepy import python, rm, set_always_raise, set_always_stream
+import pipepy
+from pipepy import python, rm
 
-set_always_stream(True)
-set_always_raise(True)
+pipepy.set_always_stream(True)
+pipepy.set_always_raise(True)
 
 
 DEFAULT_PYMAKE_TARGET = "watchtest"
@@ -49,3 +50,7 @@ def build(clean):
 
 def publish(build):
     python('-m', "twine").upload("dist/*")()
+
+
+def hello(msg="world"):
+    print(f"Hello {msg}")

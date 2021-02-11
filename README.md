@@ -713,10 +713,11 @@ the default behavior. This may be desirable in some situations, like Makefiles
 (see [below](#pymake)).
 
 ```python
-from pipepy import set_always_stream, ls
-set_always_stream(True)
+import pipepy
+from pipepy import ls
+pipepy.set_always_stream(True)
 ls()  # Alsost equivalent to `ls._s()`
-set_always_stream(False)
+pipepy.set_always_stream(False)
 ```
 
 Similarly to how `._s` forces a command to stream its output to the console,
@@ -724,11 +725,13 @@ Similarly to how `._s` forces a command to stream its output to the console,
 `set_always_stream` has been called:
 
 ```python
-from pipepy import set_always_stream, ls
-set_always_stream(True)
+import pipepy
+from pipepy import ls
+
+pipepy.set_always_stream(True)
 ls()     # Will stream its output
 ls._c()  # Will capture its output
-set_always_stream(False)
+pipepy.set_always_stream(False)
 ```
 
 ## Exceptions
@@ -768,8 +771,9 @@ You can call `pipepy.set_always_raise(True)` to have **all** commands raise an
 exception if their returncode is not zero.
 
 ```python
-from pipepy import ping, set_always_raise
-set_always_raise(True)
+import pipepy
+from pipepy import ping
+pipepy.set_always_raise(True)
 ping("asdf")()
 # <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
 ```
@@ -778,8 +782,9 @@ If "always raise" is set, you can modify a command to not raise an exception by
 calling `._q` (mnemonic **q**uiet) on it.
 
 ```python
-from pipepy import ping, set_always_raise
-set_always_raise(True)
+import pipepy
+from pipepy import ping
+pipepy.set_always_raise(True)
 try:
     ping("asdf")()  # Will raise an exception
 except Exception as exc:
@@ -807,8 +812,9 @@ interactive python shell. To set interactive mode, run
 `pipepy.set_interactive(True)`:
 
 ```python
-from pipepy import ls, set_interactive, overload_chars
-set_interactive(True)
+import pipepy
+from pipepy import ls, overload_chars
+pipepy.set_interactive(True)
 ls
 # <<< demo.py
 # ... interactive2.py
@@ -824,7 +830,7 @@ ls -l
 # ... -rw-r--r-- 1 kbairak kbairak 4761 Feb  8 20:42 main.py
 ```
 
-## `pymake`
+## pymake
 
 Bundled with this library there is a command called `pymake` which aims to
 replicate the syntax and behavior of GNU `make` as much as possible, but in
@@ -832,24 +838,29 @@ Python. A `Makefile.py` file looks like this (this is actually part of the
 Makefile of the current library):
 
 ```python
+import pipepy
 from pipepy import python, rm
 
+pipepy.set_always_stream(True)
+pipepy.set_always_raise(True)
 
 def clean():
-    rm('-rf', "build", "dist")._s()
+    rm('-rf', "build", "dist")()
 
 def build(clean):
-    python('-m', "build")._s()
+    python('-m', "build")()
 
 def publish(build):
-    python('-m', "twine").upload("dist/*")._s()
+    python('-m', "twine").upload("dist/*")()
 ```
 
 You can now run `pymake publish` to run the `publish` make target, along with
-its dependencies. The names of the arguments of the functions are used to
-define the dependencies, so `clean` is a dependency of `build` and `build` is a
-dependency of `publish`. As you can see, the `pipepy` library is a very good
-fit for `pymake`'s Makefiles.
+its dependencies. The names of the functions' arguments are used to define the
+dependencies, so `clean` is a dependency of `build` and `build` is a dependency
+of `publish`.
+
+_(You don't have to use `pipepy` commands inside `Makefile.py`, but admittedly
+it's a very good fit)_
 
 The arguments hold any return values of the dependency targets:
 
@@ -864,7 +875,10 @@ def c(a, b):
     print(a + b)
 ```
 
-`pymake c` will print `3`.
+```sh
+→ pymake c
+# ← 3
+```
 
 Each dependency will be executed at most once, even if it's used as a
 dependency more than once:
@@ -882,9 +896,9 @@ def c(a, b):
 
 ```sh
 → pymake c
-pymake target a
-pymake target b
-pymake target c
+# ← pymake target a
+# ← pymake target b
+# ← pymake target c
 ```
 
 You can set the `DEFAULT_PYMAKE_TARGET` global variable to define the default
@@ -899,10 +913,52 @@ def test():
     pytest._s()
 ```
 
+### `pymake` variables
+
+Apart from dependencies, you can use function arguments to define variables
+that can be overridden by the invocation of `pymake`. This can be done in 2
+ways:
+
+1. Using the function's keyword arguments:
+
+   ```python
+   # Makefile.py
+
+   def greeting(msg="world"):
+       print(f"hello {msg}")
+   ```
+
+   ```sh
+   → pymake greeting
+   # ← hello world
+   
+   → pymake greeting msg=Bill
+   # ← hello Bill
+   ```
+
+2. Using global variables defined in `Makefile.py`:
+
+   ```python
+   # Makefile.py
+
+   msg = "world"
+
+   def greeting(msg):
+       print(f"hello {msg}")
+   ```
+
+   ```sh
+   → pymake greeting
+   # ← hello world
+   
+   → pymake greeting msg=Bill
+   # ← hello Bill
+   ```
+
 ## TODOs
 
 - [ ] Ability to source bash files
-- [ ] Pass arguments to `pymake` (see what other tricks `make` does for
+- [x] Pass arguments to `pymake` (see what other tricks `make` does for
       inspiration)
 - [ ] Context processors for `cd` and/or environment
 - [ ] Add more docstrings

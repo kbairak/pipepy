@@ -1,6 +1,7 @@
 import time
 
-from pipepy import PipePy, cat, echo, false, ls, rm, set_always_stream, true
+import pipepy
+from pipepy import PipePy, cat, echo, false, ls, rm, true
 
 echo_messages = PipePy('python', 'src/tests/playground/echo_messages.py')
 
@@ -71,7 +72,7 @@ def test_streams():
     assert result._stdout is None
     assert result._stderr is None
 
-    set_always_stream(True)
+    pipepy.set_always_stream(True)
     result = ls()
     assert result
     assert result._stdout is None
@@ -83,4 +84,4 @@ def test_streams():
     assert result._stderr is not None
     assert not result._stderr
 
-    set_always_stream(False)
+    pipepy.set_always_stream(False)

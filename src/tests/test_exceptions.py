@@ -1,6 +1,7 @@
 import pytest
 
-from pipepy import PipePyError, false, set_always_raise, true
+import pipepy
+from pipepy import PipePyError, false, true
 
 
 def test_exceptions():
@@ -14,11 +15,11 @@ def test_exceptions():
     with pytest.raises(PipePyError):
         result = false._r()
 
-    set_always_raise(True)
+    pipepy.set_always_raise(True)
 
     with pytest.raises(PipePyError):
         result = false()
 
     result = false._q()
 
-    set_always_raise(False)
+    pipepy.set_always_raise(False)

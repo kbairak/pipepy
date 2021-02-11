@@ -1,13 +1,17 @@
-DEFAULT_PYMAKE_TARGET = "one"
+def echo1(msg1="world"):
+    print(f"hello {msg1}")
 
 
-def one():
-    print("one")
+msg2 = "world"
 
 
-def two():
-    print("two")
+def echo2(msg2):
+    print(f"hello {msg2}")
 
 
-def one_and_two(one, two):
+def echo3(echo1, echo2):
+    pass
+
+
+def echo4(echo3, echo1):
     pass
