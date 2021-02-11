@@ -24,6 +24,7 @@ A Python library for invoking and interacting with shell commands.
 * [Streaming to console](#streaming-to-console)
 * [Utils](#utils)
 * ["Interactive" mode](#interactive-mode)
+* [`pymake`](#pymake)
 * [TODOs](#todos)
 
 <!-- Added by: kbairak, at: Wed Feb 10 12:13:31 PM EET 2021 -->
@@ -70,18 +71,23 @@ To run the tests, you need to first install the testing requirements:
 ```sh
 python -m pip install -r test_requirements.txt
 
-make test
+pymake test
 # or
 pytest
 ```
 
-There are a few more `make` targets to assist with testing during development:
+There are a few more `pymake` targets to assist with testing during
+development:
 
 - `covtest`: Produces and opens a coverage report
 - `watchtest`: Listens for changes in the source code files and reruns the
   tests automatically
 - `debugtest`: Runs the tests without capturing their output so that you can
   insert a debug statement
+
+_`pymake` is a console script that is part of `pipepy` that aims to be a
+replacement for GNU `make`, with the difference that the `Makefile`s are
+written in Python. More on this [below](#pymake)._
 
 ## Intro, basic usage
 
@@ -187,20 +193,6 @@ following ways:
   ```python
   from pipepy import grep
   (f"{i}\n" for i in range(5)) | grep(2)
-  ```
-
-- Setting the command to run in the background (this will be further explained
-  below):
-
-  ```python
-  download = -wget('http://...')
-  # Do something else in the meantime
-  download.wait()
-  if download:
-      print("Download was successful")
-  else:
-      print("Download was successful")
-
   ```
 
 If you are not interested in the output of a command but want to evaluate it
@@ -433,8 +425,9 @@ ping('-c', 30, "google.com") | mean_ping
 
 ## Running in the background
 
-You can run commands in the background by prepending `-` to them. At a later
-point you can wait for them to finish with `.wait()`.
+You can run commands in the background by calling the `_d` (mnemonic:
+**d**aemon) attribute. At a later point you can wait for them to finish with
+`.wait()`.
 
 ```python
 import time
@@ -444,7 +437,7 @@ def main():
    start = time.time()
 
    print(f"Starting background process at {time.time() - start}")
-   result = -sleep(3)
+   result = sleep(3)._d()
 
    print(f"Printing message at {time.time() - start}")
 
@@ -590,12 +583,12 @@ for when the block ends:
 ```python
 from pipepy import math_quiz
 
-command = -math_quiz
+job = math_quiz._d()
 
-with command as (stdin, stdout, stderr):
+with job as (stdin, stdout, stderr):
     ...
 
-if command:  # No need to `command.wait()`
+if job:  # No need to `job.wait()`
     print("Math quiz successful")
 else:
     print("Math quiz failed")
@@ -617,11 +610,11 @@ print(result.stdout)
 
 `gzip` cannot work in text mode because its output is binary data that cannot
 be utf-8-decoded. When text mode is not desirable, a command can be converted
-to binary mode by prepending the `~` operator:
+to binary mode by accessing the `_b` (mnemonic: **b**inary) attribute:
 
 ```python
 from pipepy import gzip
-result = "hello world" | ~gzip
+result = "hello world" | gzip._b
 print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\xcbH\xcd\xc9\xc9W(\xcf/\xcaI\xe1\x02\x00-;\x08\xaf\x0c\x00\x00\x00'
 ```
@@ -633,10 +626,10 @@ the `_encoding` keyword argument:
 
 ```python
 from pipepy import gzip
-result = "καλημέρα" | ~gzip
+result = "καλημέρα" | gzip._b
 print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x01\x10\x00\xef\xff\xce\xba\xce\xb1\xce\xbb\xce\xb7\xce\xbc\xce\xad\xcf\x81\xce\xb1"\x15g\xab\x10\x00\x00\x00'
-result = "καλημέρα" | ~gzip(_encoding="iso-8859-7")
+result = "καλημέρα" | gzip._b(_encoding="iso-8859-7")
 print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03{\xf5\xf0\xf5\xf37w?>\x04\x00\x1c\xe1\xc0\xf7\x08\x00\x00\x00'
 ```
@@ -695,12 +688,12 @@ interact with interactive commands. Consider the following 2 examples:
 Also, during a script, you may not be interested in capturing the output of a
 command but may want to stream it to the console to show the command's output
 to the user. A shortcut for setting both `_stream_stdout` and `_stream_stderr`
-to `True` is the `+` sign:
+to `True` is the `_s` (mnemonic: **s**tream) attribute:
 
 ```python
 from pipepy import wget
 
-(+wget('https://...'))()
+wget('https://...')._s()
 ```
 
 While `stdout` and `stderr` will not be captured, `returncode` will and thus
@@ -709,7 +702,7 @@ you can still use the command in boolean expressions:
 ```python
 from pipepy import wget
 
-if +wget('https://...'):
+if wget('https://...')._s:
      print("Download succeeded")
 else:
      print("Download failed")
@@ -746,6 +739,82 @@ ls -l
 # ... -rw-r--r-- 1 kbairak kbairak  293 Feb  7 22:04 interactive.py
 # ... -rw-r--r-- 1 kbairak kbairak 4761 Feb  8 20:42 main.py
 ```
+
+## `pymake`
+
+Bundled with this library there is a command called `pymake` which aims to
+replicate the syntax and behavior of GNU `make` as much as possible, but in
+Python. A `Makefile.py` file looks like this (this is actually part of the
+Makefile of the current library):
+
+```python
+from pipepy import python, rm
+
+
+def clean():
+    rm('-rf', "build", "dist")._s()
+
+def build(clean):
+    python('-m', "build")._s()
+
+def publish(build):
+    python('-m', "twine").upload("dist/*")._s()
+```
+
+You can now run `pymake publish` to run the `publish` make target, along with
+its dependencies. The names of the arguments of the functions are used to
+define the dependencies, so `clean` is a dependency of `build` and `build` is a
+dependency of `publish`. As you can see, the `pipepy` library is a very good
+fit for `pymake`'s Makefiles.
+
+The arguments hold any return values of the dependency targets:
+
+```python
+def a():
+    return 1
+
+def b():
+    return 2
+
+def c(a, b):
+    print(a + b)
+```
+
+`pymake c` will print `3`.
+
+Each dependency will be executed at most once, even if it's used as a
+dependency more than once:
+
+```python
+def a():
+    print("pymake target a")
+
+def b(a):
+    print("pymake target b")
+
+def c(a, b):
+    print("pymake target c")
+```
+
+```sh
+→ pymake c
+pymake target a
+pymake target b
+pymake target c
+```
+
+You can set the `DEFAULT_PYMAKE_TARGET` global variable to define the default
+target.
+
+```python
+from pipepy import pytest
+
+DEFAULT_PYMAKE_TARGET = "test"
+
+def test():
+    pytest._s()
+```
+
 ## TODOs
 
 - [x] Think of more syntactic sugar (find a use for decorators/context
@@ -758,6 +827,6 @@ ls -l
 - [ ] Stream and capture `stdout` and `stderr`
 - [ ] Ability to source bash files
 - [ ] Python virtual environments
-- [ ] `make` alternative
+- [x] `make` alternative
 - [ ] Option to make `_stream_stdout/err` the default (and to reverse it with
-      `+`)
+      `_s`)
