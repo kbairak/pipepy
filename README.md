@@ -731,6 +731,67 @@ ls._c()  # Will capture its output
 set_always_stream(False)
 ```
 
+## Exceptions
+
+You can call `.raise_for_returncode()` on an **evaluated** result to raise an
+exception if its returncode is not 0 (think of
+[requests's `.raise_for_status()`](https://requests.readthedocs.io/en/master/api/#requests.Response.raise_for_status)):
+
+```python
+from pipepy import ping, PipePyError
+result = ping("asdf")()  # Remember, we have to evaluate it first
+
+result.raise_for_returncode()
+# <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
+
+try:
+    result.raise_for_returncode()
+except PipePyError as exc:
+    print(exc.returncode)
+    # <<< 2
+    print(exc.stdout)
+    # <<< ""
+    print(exc.stderr)
+    # <<< ping: asdf: Name or service not known
+```
+
+You can call `._r` (mnemonic **r**aise) on a command to have it always raise an
+exception upon evaluation if its returncode ends up not being zero:
+
+```python
+from pipepy import ping
+ping("asdf")._r()
+# <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
+```
+
+You can call `pipepy.set_always_raise(True)` to have **all** commands raise an
+exception if their returncode is not zero.
+
+```python
+from pipepy import ping, set_always_raise
+set_always_raise(True)
+ping("asdf")()
+# <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
+```
+
+If "always raise" is set, you can modify a command to not raise an exception by
+calling `._q` (mnemonic **q**uiet) on it.
+
+```python
+from pipepy import ping, set_always_raise
+set_always_raise(True)
+try:
+    ping("asdf")()  # Will raise an exception
+except Exception as exc:
+    print(exc)
+# <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
+
+try:
+    ping("asdf")._q()  # Will not raise an exception
+except Exception as exc:
+    print(exc)
+```
+
 ## Utils
 
 Since changing the current working directory or the environment in a subprocess

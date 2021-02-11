@@ -3,8 +3,11 @@ import reprlib
 import subprocess
 from glob import glob
 
+from .exceptions import PipePyError
+
 INTERACTIVE = False
 ALWAYS_STREAM = False
+ALWAYS_RAISE = False
 
 
 def set_interactive(value):
@@ -15,6 +18,11 @@ def set_interactive(value):
 def set_always_stream(value):
     global ALWAYS_STREAM
     ALWAYS_STREAM = value
+
+
+def set_always_raise(value):
+    global ALWAYS_RAISE
+    ALWAYS_RAISE = value
 
 
 class PipePy:
@@ -37,7 +45,7 @@ class PipePy:
 
     def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=None,
                  _stream_stderr=None, _wait=True, _text=True,
-                 _encoding="utf8", **kwargs):
+                 _encoding="utf8", _raises_exception=None, **kwargs):
         """ Initialize a PipePy object.
 
             `args` and `kwargs` will determine the command line arguments
@@ -59,6 +67,7 @@ class PipePy:
         self._wait = _wait
         self._text = _text
         self._encoding = _encoding
+        self._raises_exception = _raises_exception
         self._stdin_close_pending = False
 
         self._process = None  # To be used with background processes
@@ -71,7 +80,7 @@ class PipePy:
     # Customizing instance
     def __call__(self, *args, _stdin=None, _stream_stdout=None,
                  _stream_stderr=None, _wait=None, _text=None,
-                 _encoding=None, **kwargs):
+                 _encoding=None, _raises_exception=None, **kwargs):
         """ Make and return a copy of `self` overriding some of it's
             initialization arguments. Also, if `__call__` is called with no
             arguments, an evaluation will be forced on the returned copy.
@@ -93,7 +102,8 @@ class PipePy:
                  _stream_stderr is None and
                  _wait is None and
                  _text is None and
-                 _encoding is None)
+                 _encoding is None and
+                 _raises_exception is None)
 
         args = self._args + list(args)
 
@@ -109,6 +119,8 @@ class PipePy:
             _text = self._text
         if _encoding is None:
             _encoding = self._encoding
+        if _raises_exception is None:
+            _raises_exception = self._raises_exception
 
         result = self.__class__(*args,
                                 _lazy=True,
@@ -118,6 +130,7 @@ class PipePy:
                                 _wait=_wait,
                                 _text=_text,
                                 _encoding=_encoding,
+                                _raises_exception=_raises_exception,
                                 **kwargs)
 
         if force:
@@ -157,14 +170,18 @@ class PipePy:
         """
 
         # Can't use poperties here because properties aren't callable
-        if attr == "_s":  # Short for **s**tream
+        if attr == "_s":  # Short for Stream
             return self(_stream_stdout=True, _stream_stderr=True)
-        elif attr == "_c":  # Short for **c**apture
+        elif attr == "_c":  # Short for Capture
             return self(_stream_stdout=False, _stream_stderr=False)
-        elif attr == "_b":  # Short for **b**inary
+        elif attr == "_b":  # Short for Binary
             return self(_text=False)
-        elif attr == "_d":  # Short for **d**aemon
+        elif attr == "_d":  # Short for Daemon
             return self(_wait=False)
+        elif attr == "_r":  # Short for Raise
+            return self(_raises_exception=True)
+        elif attr == "_q":  # Short for Quiet
+            return self(_raises_exception=False)
         else:
             return self.__class__(*(self._args + [attr]), _lazy=False)
 
@@ -288,6 +305,12 @@ class PipePy:
         self._returncode = self._process.wait(timeout)
         self._process = None
 
+        raises_exception = self._raises_exception
+        if raises_exception is None:
+            raises_exception = ALWAYS_RAISE
+        if raises_exception:
+            self.raise_for_returncode()
+
     # Get results
     @property
     def returncode(self):
@@ -374,6 +397,10 @@ class PipePy:
     def iter_words(self):
         for line in self:
             yield from iter(line.split())
+
+    def raise_for_returncode(self):
+        if self._returncode != 0:
+            raise PipePyError(self._returncode, self._stdout, self._stderr)
 
     def __repr__(self):
         if INTERACTIVE:

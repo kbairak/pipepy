@@ -1,7 +1,8 @@
 from pipepy import (coverage, firefox, flake8, isort, pytest, pytest_watch,
-                    python, rm, set_always_stream)
+                    python, rm, set_always_stream, set_always_raise)
 
 set_always_stream(True)
+set_always_raise(True)
 
 
 DEFAULT_PYMAKE_TARGET = "test"
