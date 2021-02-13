@@ -1,4 +1,5 @@
 import time
+
 from pipepy import PipePy
 
 echo_messages = PipePy('python', 'src/tests/playground/echo_messages.py')

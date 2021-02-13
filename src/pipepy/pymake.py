@@ -1,6 +1,6 @@
-import sys
 import importlib.util
 import inspect
+import sys
 
 Makefile = None
 already_run = {}

@@ -68,7 +68,6 @@ class PipePy:
         self._text = _text
         self._encoding = _encoding
         self._raises_exception = _raises_exception
-        self._stdin_close_pending = False
 
         self._process = None  # To be used with background processes
         self._context = None  # To be used with `with` statements

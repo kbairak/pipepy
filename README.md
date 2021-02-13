@@ -22,12 +22,14 @@ A Python library for invoking and interacting with shell commands.
    * [3. Reading data from and writing data to a command](#3-reading-data-from-and-writing-data-to-a-command)
 * [Binary mode](#binary-mode)
 * [Streaming to console](#streaming-to-console)
+* [Exceptions](#exceptions)
 * [Utils](#utils)
 * ["Interactive" mode](#interactive-mode)
-* [`pymake`](#pymake)
+* [pymake](#pymake)
+   * [pymake variables](#pymake-variables)
 * [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Wed Feb 10 12:13:31 PM EET 2021 -->
+<!-- Added by: kbairak, at: Fri Feb 12 09:28:03 AM EET 2021 -->
 
 <!--te-->
 
@@ -403,12 +405,7 @@ from pipepy import ping
 
 def mean_ping(stdout):
     pings = []
-    lines = iter(stdout)
-    while True:
-        try:
-            line = next(lines)
-        except StopIteration:
-            break
+    for line in stdout:
         match = re.search(r'time=([\d\.]+) ms$', line.strip())
         if not match:
             continue
@@ -957,6 +954,7 @@ ways:
 
 ## TODOs
 
+- [ ] Long pipe chains (eg `my_stdin() | grep('-E', r'\b17$') | greedy_print`)
 - [ ] Ability to source bash files
 - [x] Pass arguments to `pymake` (see what other tricks `make` does for
       inspiration)

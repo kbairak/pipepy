@@ -22,6 +22,15 @@ def test_pymake_args():
     cd('../../..')
 
 
+def test_pymake_default_target():
+    cd('src/tests/playground')
+
+    assert str(pymake) == "hello world\n"
+    assert str(pymake('msg1=Bill')) == "hello Bill\n"
+
+    cd('../../..')
+
+
 def test_pymake_dependencies():
     cd('src/tests/playground')
 

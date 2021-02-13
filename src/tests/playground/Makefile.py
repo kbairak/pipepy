@@ -1,3 +1,6 @@
+DEFAULT_PYMAKE_TARGET = "echo1"
+
+
 def echo1(msg1="world"):
     print(f"hello {msg1}")
 

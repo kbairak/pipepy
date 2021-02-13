@@ -37,7 +37,7 @@ def debugtest():
 def checks():
     from pipepy import flake8, isort
     flake8()
-    isort()
+    isort('.')()
 
 
 def clean():
@@ -50,7 +50,3 @@ def build(clean):
 
 def publish(build):
     python('-m', "twine").upload("dist/*")()
-
-
-def hello(msg="world"):
-    print(f"Hello {msg}")
