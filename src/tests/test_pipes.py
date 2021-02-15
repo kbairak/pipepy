@@ -1,4 +1,4 @@
-from pipepy import echo, grep
+from pipepy import cat, echo, grep
 
 
 def test_pipe_command_to_command():
@@ -20,3 +20,22 @@ def test_pipe_command_to_function():
 
 def test_pipe_string_to_command():
     str("aaa\nbbb" | grep('b')) == "bbb\n"
+
+
+def my_input():
+    yield "line one\n"
+    yield "line two\n"
+    yield "line two\n"
+    yield "something else\n"
+    yield "line three\n"
+
+
+def my_output(stdout):
+    for line in stdout:
+        yield line.upper()
+
+
+def test_long_pipe():
+    assert (str(my_input() | cat | grep('line') | my_output | grep("TWO")).
+            strip() ==
+            "LINE TWO\nLINE TWO")

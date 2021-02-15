@@ -13,13 +13,13 @@ def test_exceptions():
         result.raise_for_returncode()
 
     with pytest.raises(PipePyError):
-        result = false._r()
+        result = false(_raise_exception=True)()
 
     pipepy.set_always_raise(True)
 
     with pytest.raises(PipePyError):
         result = false()
 
-    result = false._q()
+    result = false.quiet()()
 
     pipepy.set_always_raise(False)

@@ -1,23 +1,15 @@
 import inspect
 import reprlib
-import subprocess
+from copy import copy
 from glob import glob
+from subprocess import PIPE, Popen
 
 from .exceptions import PipePyError
+from .utils import _File, is_iterable
 
-INTERACTIVE = False
-ALWAYS_STREAM = False
 ALWAYS_RAISE = False
-
-
-def set_interactive(value):
-    global INTERACTIVE
-    INTERACTIVE = value
-
-
-def set_always_stream(value):
-    global ALWAYS_STREAM
-    ALWAYS_STREAM = value
+ALWAYS_STREAM = False
+INTERACTIVE = False
 
 
 def set_always_raise(value):
@@ -25,116 +17,136 @@ def set_always_raise(value):
     ALWAYS_RAISE = value
 
 
+def set_always_stream(value):
+    global ALWAYS_STREAM
+    ALWAYS_STREAM = value
+
+
+def set_interactive(value):
+    global INTERACTIVE
+    INTERACTIVE = value
+
+
 class PipePy:
-    """ Convenience utility for invoking shell commands.
-
-        Usage:
-
-            >>> igrep = PipePy('grep', '-i')
-            >>> ls = PipePy('ls')
-            >>> ps = PipePy('ps')
-
-            >>> result = ls('-l') | igrep('main')
-            >>> result.stdout
-            <<< '-rw-r--r-- 1 kbairak kbairak 3163 Jan 22 09:11 main.py'
-            >>> result.returncode
-            <<< 0
-            >>> bool(result)
-            <<< True
-    """
-
-    def __init__(self, *args, _lazy=False, _stdin=None, _stream_stdout=None,
-                 _stream_stderr=None, _wait=True, _text=True,
-                 _encoding="utf8", _raises_exception=None, **kwargs):
+    # Init and copies
+    def __init__(self, *args, _lazy=False, _left=None, _stream_stdout=None,
+                 _stream_stderr=None, _stream=None, _text=True,
+                 _encoding="UTF-8", _raise_exception=None, **kwargs):
         """ Initialize a PipePy object.
 
-            `args` and `kwargs` will determine the command line arguments
-            passed to the subprocess. The rest of the keyword arguments
-            customize how the subprocess will be executed. See `_evaluate`'s
-            docstring for details.
+            Usually you will not need to call this directly, but invoke
+            `__call__` to customize existing PipePy objects. Most arguments are
+            not meant to be set by users directly, but by other functions or
+            operators.
 
-            Generally the keyword arguments should not be set by hand but by
-            other methods of PipePy, with the exception of `_stream_stdout`,
-            `_stream_stderr` and `_encoding` for which no fancy syntax exists
-            (yet).
+            The ones you may set yourself are:
+
+            - args, kwargs: Customizes the command that is passed to the shell
+
+            - _stream_stdout, _stream_stderr: Determines whether the relevant
+                output stream of the command will be stored or whether it will
+                be passed on to the relevant stream of the underlying Python
+                process. `_stream` applies to both streams takes precedence
+                over the other two. If you get a copy of the command with
+                `.stream()`, the `_stream` parameter will be set. If not set,
+                the `pipepy.ALWAYS_STREAM` value will be respected (defaults to
+                False)
+
+            - _text, _encoding: Whether the `str` or the `bytes` type will be
+                used for input and output. `_text` defaults to `True`. The
+                associated subprocesses and files will be opened with this
+                setting. Also, strings or byte sequences passed as input/output
+                will be automatically converted to the correct type, using the
+                encoding described by `_encoding` (defaults to `UTF-8`)
+
+            - _raise_exception: Whether a command will raise an exception if
+                its returncode is not 0. If not set, the `pipepy.ALWAYS_RAISE`
+                setting will be respsected (defaults to `False`). If you don't
+                set it, or if you set it to `False`, you can still raise an
+                exception by calling `command.raise_for_returncode()` (similar
+                to `request`'s `response.raise_for_status()`)
+
+            The ones that are set by functions or operators are:
+
+            - _lazy: Whether this instance will be evaluated again after having
+                been evaluated once. PipePy objects created with the
+                constructor will have this set to False but copies returned
+                from `__call__` or other helper functions will have this set to
+                True
+
+            - _left: Where the command's input comes from. Will be populated by
+                pipe operations `"foo\nbar\n" | grep("foo")` will be equivalent
+                to`grep("foo", _left="foo\nbar\n")`)
+
+            - _stream: Whether the output streams will be captured or passed on
+                to the relevant streams of the underlying Python process. Will
+                be set to True to the copy returned by `.stream()`
         """
 
         self._args = self._convert_args(args, kwargs)
         self._lazy = _lazy
-        self._stdin = _stdin
+        self._left = _left
         self._stream_stdout = _stream_stdout
         self._stream_stderr = _stream_stderr
-        self._wait = _wait
+        self._stream = _stream
         self._text = _text
         self._encoding = _encoding
-        self._raises_exception = _raises_exception
+        self._raise_exception = _raise_exception
 
-        self._process = None  # To be used with background processes
-        self._context = None  # To be used with `with` statements
+        self._process = None
+        self._input_fed = False
 
         self._returncode = None
         self._stdout = None
         self._stderr = None
 
-    # Customizing instance
-    def __call__(self, *args, _stdin=None, _stream_stdout=None,
-                 _stream_stderr=None, _wait=None, _text=None,
-                 _encoding=None, _raises_exception=None, **kwargs):
-        """ Make and return a copy of `self` overriding some of it's
-            initialization arguments. Also, if `__call__` is called with no
-            arguments, an evaluation will be forced on the returned copy.
+    def __call__(self, *args, _left=None, _stream_stdout=None,
+                 _stream_stderr=None, _stream=None, _text=None, _encoding=None,
+                 _raise_exception=None, **kwargs):
+        """ Make and return a copy of `self`, overriding some of its
+            parameters.
 
-            The copy will not be lazy (see `_evaluate`'s docstring).
+            The copy will be lazy, ie if evaluated once and its output accessed
+            a second time, the second time will return the stored values and
+            not trigger another evaluation.
 
-                >>> ls_l = PipePy('ls', '-l')
-
-            is *almost* equivalent to
-
-                >>> ls = PipePy('ls')
-                >>> ls_l = ls('-l')
+            If called without any arguments, will immediately trigger an
+            evaluation.
         """
 
         force = (not args and
-                 not kwargs and
-                 _stdin is None and
+                 _left is None and
                  _stream_stdout is None and
                  _stream_stderr is None and
-                 _wait is None and
+                 _stream is None and
                  _text is None and
                  _encoding is None and
-                 _raises_exception is None)
+                 _raise_exception is None and
+                 not kwargs)
 
         args = self._args + list(args)
-
-        if _stdin is None:
-            _stdin = self._stdin
+        if _left is None:
+            _left = self._left
         if _stream_stdout is None:
             _stream_stdout = self._stream_stdout
         if _stream_stderr is None:
             _stream_stderr = self._stream_stderr
-        if _wait is None:
-            _wait = self._wait
+        if _stream is None:
+            _stream = self._stream
         if _text is None:
             _text = self._text
         if _encoding is None:
             _encoding = self._encoding
-        if _raises_exception is None:
-            _raises_exception = self._raises_exception
+        if _raise_exception is None:
+            _raise_exception = self._raise_exception
 
-        result = self.__class__(*args,
-                                _lazy=True,
-                                _stdin=_stdin,
-                                _stream_stdout=_stream_stdout,
-                                _stream_stderr=_stream_stderr,
-                                _wait=_wait,
-                                _text=_text,
-                                _encoding=_encoding,
-                                _raises_exception=_raises_exception,
-                                **kwargs)
-
+        result = PipePy(*args, _lazy=True, _left=_left,
+                        _stream_stdout=_stream_stdout,
+                        _stream_stderr=_stream_stderr, _stream=_stream,
+                        _text=_text, _encoding=_encoding,
+                        _raise_exception=_raise_exception, **kwargs)
         if force:
             result._evaluate()
-
         return result
 
     def __sub__(left, right):
@@ -168,21 +180,27 @@ class PipePy:
                 >>> git('status')
         """
 
-        # Can't use poperties here because properties aren't callable
-        if attr == "_s":  # Short for Stream
-            return self(_stream_stdout=True, _stream_stderr=True)
-        elif attr == "_c":  # Short for Capture
-            return self(_stream_stdout=False, _stream_stderr=False)
-        elif attr == "_b":  # Short for Binary
-            return self(_text=False)
-        elif attr == "_d":  # Short for Daemon
-            return self(_wait=False)
-        elif attr == "_r":  # Short for Raise
-            return self(_raises_exception=True)
-        elif attr == "_q":  # Short for Quiet
-            return self(_raises_exception=False)
-        else:
-            return self.__class__(*(self._args + [attr]), _lazy=False)
+        return self.__class__(*(self._args + [attr]), _lazy=False)
+
+    def __copy__(self):
+        result = PipePy(*self._args, _left=copy(self._left))
+        result._lazy = True
+        return result
+
+    def stream(self):
+        """ Returns a copy with `_stream` set to True. """
+
+        return self(_stream=True)
+
+    def quiet(self):
+        """ Returns a copy with `_raise_exception` set to False.
+
+            Intended to be used when most, but not all commands are supposed to
+            raise exceptions. You can get most commands to raise them with
+            `pipepy.ALWAYS_RAISE = True` and customize the ones that should not
+            with `command = command.quiet()`.
+        """
+        return self(_raise_exception=False)
 
     @staticmethod
     def _convert_args(args, kwargs):
@@ -231,106 +249,222 @@ class PipePy:
                 final_args.append(f"--{key}={value}")
         return final_args
 
-    # Evaluation
+    # Lifetime implementation
     def _evaluate(self):
-        """ Actually evaluates the subprocess. `__init__`'s keyword arguments
-            change how this behaves:
+        """ Start an evaluations, Lazy commands that have been evaluated before
+            will abort. The lifetime of a command being evaluated consists of 3
+            steps:
 
-            - _lazy: If True and this instance has been evaluated before, it
-                  will do nothing. Otherwise a new evaluation will be forced.
+            - Starting the process
+            - Feeding the input to the process's stdin, if it has been
+              configured to do so with pipes etc
+            - Waiting for the command to finish and capture its result
 
-            - _stdin: If set, it will be passed to the subprocess as its
-                  standard input. If it's a file-like object, it will be
-                  directly set as the subprocess's stdin, otherwise it will be
-                  passed to a `Popen.communicate` call later on
-
-            - _stream_stdout: If true, `None` will be set as the subprocess's
-                  stdout, resulting in its output being streamed to the console
-                  and thus not captured by `self._stdout`
-
-            - _stream_stderr: Same as `_stream_stdout`, but for stderr
-
-            - _text: Whether the subprocess will be opened in text mode.
-                  Defaults to True
-
-            - _wait: Whether the subprocess will be waited for. If False, the
-                  caller may interact with the process via `self._process`,
-                  before waiting for it with `self.wait()`
+            Piping operations usually don't call this method to evaluate but
+            manually invoke the first 2 steps, utilizing the output of the
+            process and then calling `wait`, which is a public method.
         """
 
         if self._returncode is not None and self._lazy:
             return
 
-        if self._stdin is not None:
-            if self._stdin is not None and hasattr(self._stdin, 'read'):
-                # File-like object
-                stdin = self._stdin
+        self._start_background_job()
+        self._feed_input()
+        self.wait()
+
+    def _start_background_job(self, stdin_to_pipe=False):
+        """ Starts the process that will carry out the command. If the process
+            has already been started, it will abort. If the input to this
+            command is another PipePy object, its background process will be
+            started too via this method (so it will recursively start all
+            background processes of a pipe chain if necessary) and its stdout
+            will be connected to our stdin.
+        """
+
+        if self._process is not None and self._lazy:
+            return
+
+        if isinstance(self._left, PipePy):
+            if self._left._returncode is not None:
+                stdin = PIPE
             else:
-                stdin = subprocess.PIPE
-        elif not self._wait:
-            stdin = subprocess.PIPE
+                self._left._start_background_job(stdin_to_pipe=stdin_to_pipe)
+                stdin = self._left._process.stdout
+        elif (is_iterable(self._left) or
+              stdin_to_pipe or
+              isinstance(self._left, _File)):
+            stdin = PIPE
         else:
             stdin = None
 
-        _stream_stdout = self._stream_stdout
-        if _stream_stdout is None:
-            _stream_stdout = ALWAYS_STREAM
-        if _stream_stdout:
-            stdout = None
+        if self._stream_stdout is None and self._stream is None:
+            stdout = None if ALWAYS_STREAM else PIPE
+        elif self._stream_stdout is None and self._stream is not None:
+            stdout = None if self._stream else PIPE
         else:
-            stdout = subprocess.PIPE
+            stdout = None if self._stream_stdout else PIPE
 
-        _stream_stderr = self._stream_stderr
-        if _stream_stderr is None:
-            _stream_stderr = ALWAYS_STREAM
-        if _stream_stderr:
-            stderr = None
+        if self._stream_stderr is None and self._stream is None:
+            stderr = None if ALWAYS_STREAM else PIPE
+        elif self._stream_stderr is None and self._stream is not None:
+            stderr = None if self._stream else PIPE
         else:
-            stderr = subprocess.PIPE
+            stderr = None if self._stream_stderr else PIPE
 
-        self._process = subprocess.Popen(self._args, stdin=stdin,
-                                         stdout=stdout, stderr=stderr,
-                                         text=self._text)
+        self._process = Popen(self._args,
+                              stdin=stdin, stdout=stdout, stderr=stderr,
+                              text=self._text)
 
-        if self._wait:
-            self.wait()
+    def _feed_input(self):
+        """ If the command has been configured to receive special input via its
+            `_left` parameter, ie via pipes or input redirects, the input will
+            be passed to the command during this step.
+        """
 
-    def wait(self, timeout=None):
-        if isinstance(self._stdin, (bytes, str)):
-            stdin = self._stdin
-        else:
-            stdin = None
-        self._stdout, self._stderr = self._process.communicate(stdin, timeout)
-        self._returncode = self._process.wait(timeout)
-        self._process = None
+        if self._input_fed and self._lazy:
+            return
 
-        raises_exception = self._raises_exception
-        if raises_exception is None:
-            raises_exception = ALWAYS_RAISE
-        if raises_exception:
+        left = self._left
+        if isinstance(left, PipePy):
+            if left._returncode is not None:
+                chunk = left.stdout
+                if self._text:
+                    try:
+                        chunk = chunk.decode(self._encoding)
+                    except AttributeError:
+                        pass
+                else:
+                    try:
+                        chunk = chunk.encode(self._encoding)
+                    except AttributeError:
+                        pass
+                self._process.stdin.write(chunk)
+                self._process.stdin.flush()
+                self._process.stdin.close()
+            else:
+                left._start_background_job()
+                left._feed_input()
+        elif isinstance(left, _File):
+            with open(left.filename,
+                      mode="r" if self._text else "rb",
+                      encoding=self._encoding) as f:
+                for line in f:
+                    self._process.stdin.write(line)
+                    self._process.stdin.flush()
+                self._process.stdin.close()
+        elif is_iterable(left):
+            if isinstance(left, (str, bytes)):
+                left = [left]
+            for chunk in left:
+                if self._text:
+                    try:
+                        chunk = chunk.decode(self._encoding)
+                    except AttributeError:
+                        pass
+                else:
+                    try:
+                        chunk = chunk.encode(self._encoding)
+                    except AttributeError:
+                        pass
+                self._process.stdin.write(chunk)
+                self._process.stdin.flush()
+            self._process.stdin.close()
+
+        self._input_fed = True
+
+    # Control lifetime
+    def wait(self):
+        """ Wait for a process to finish and store the result.
+
+            This is called internally by pipe operations, but can also be
+            called by the user for a background command that has been created
+            with `.delay()`.
+
+                >>> sleep = PipePy('sleep')
+                >>> job = sleep(5).delay()
+                >>> job.wait()
+                >>> print("Job finished")
+        """
+
+        try:
+            self._stdout, self._stderr = self._process.communicate()
+        except ValueError:
+            self._stdout = self._process.stdout.read()
+            self._stderr = self._process.stderr.read()
+        self._returncode = self._process.wait()
+
+        raise_exception = self._raise_exception
+        if raise_exception is None:
+            raise_exception = ALWAYS_RAISE
+        if raise_exception:
             self.raise_for_returncode()
 
-    # Get results
+    def delay(self):
+        """ Create and return a copy of `self` and perform 2 out of 3 steps of
+            its evaluation, ie don't wait for its result.
+
+            You can then manually `.wait()` for this command to finish, or you
+            can try to evaluate it (by accessing its output), which will cause
+            its normal `_evaluate` method to run, which will skip the first 2
+            steps and internally call `.wait()` before capturing its output
+
+                >>> sleep = PipePy('sleep')
+                >>> job = sleep(5).delay()
+                >>> if job:  # This will wait for the command to finish
+                ...     print("Job finished")
+
+            You should take care to manually wait for background commands to
+            finish yourself. If the python process ends, all its child
+            processes will end too and your command may be killed abrubtly.
+        """
+
+        result = copy(self)
+        result._start_background_job()
+        result._feed_input()
+        return result
+
+    def raise_for_returncode(self):
+        """ Raise an exception if the command's returncode is not 0.
+
+            Will be called automatically for all commands that are not created
+            with `.quiet` if `pipepy.ALWAYS_RAISE` is True.
+
+            The exception will have the `returncode`, `stdout` and `stderr`
+            properties.
+        """
+
+        if self.returncode != 0:
+            raise PipePyError(self._returncode, self._stdout, self._stderr)
+
+    # Getting output
     @property
     def returncode(self):
-        """ Lazily return the subprocess's return code. """
+        """ Evaluate the command and return its returncode. """
 
         self._evaluate()
         return self._returncode
 
     @property
     def stdout(self):
-        """ Lazily return the subprocess's stdout. """
+        """ Evaluate the command and return its stdout. """
 
         self._evaluate()
         return self._stdout
 
     @property
     def stderr(self):
-        """ Lazily return the subprocess's stderr. """
+        """ Evaluate the command and return its stderr. """
 
         self._evaluate()
         return self._stderr
+
+    def __str__(self):
+        """ Return stdout as string, even if the command has `_text=False`. """
+
+        try:
+            return self.stdout.decode(self._encoding)
+        except AttributeError:
+            return self.stdout
 
     def __bool__(self):
         """ Use in boolean expressions.
@@ -346,13 +480,36 @@ class PipePy:
 
         return self.returncode == 0
 
-    def __str__(self):
-        """ Return stdout as string, even if the subprocess is opened in binary
-            mode. """
-        result = self.stdout
-        if not self._text:
-            result = result.decode(self._encoding)
-        return result
+    def __iter__(self):
+        """ Support the iteration interface:
+
+            Usage:
+
+                >>> ls = PipePy('ls')
+                >>> for name in ls:
+                ...     print(ls.upper())
+        """
+
+        if self._stdout is not None:
+            yield from self._stdout.splitlines()
+        else:
+            self._start_background_job()
+            self._feed_input()
+            yield from self._process.stdout
+
+    def iter_words(self):
+        """ Iterate over the *words* of the output of the command.
+
+                >>> ps = PipePy('ps')
+                >>> list(ps.iter_words())
+                <<< ['PID', 'TTY', 'TIME', 'CMD',
+                ...  '11439', 'pts/5', '00:00:00', 'zsh',
+                ...  '15532', 'pts/5', '00:00:10', 'ptipython',
+                ...  '15539', 'pts/5', '00:00:00', 'ps']
+        """
+
+        for line in self:
+            yield from line.split()
 
     def as_table(self):
         """ Usage:
@@ -376,32 +533,20 @@ class PipePy:
             result.append(item)
         return result
 
-    def __iter__(self):
-        """ Support the iteration interface:
+    def __repr__(self):
+        """ Return some useful information about the PipePy object.
 
-            Usage:
+            If `pipepy.INTERACTIVE` is set, it will evaluate and print the
+            command's output, offering a semblance of an interactive shell.
 
                 >>> ls = PipePy('ls')
-                >>> for name in ls:
-                ...     print(ls.upper())
+                >>> ls
+                <<< PipePy('ls')
+                >>> pipepy.INTERACTIVE = True
+                >>> ls
+                <<< main.py files.txt
         """
 
-        if self._stdout is not None:
-            yield from str(self).splitlines()
-        else:
-            command = self._d()
-            for line in command._process.stdout:
-                yield line
-
-    def iter_words(self):
-        for line in self:
-            yield from iter(line.split())
-
-    def raise_for_returncode(self):
-        if self._returncode != 0:
-            raise PipePyError(self._returncode, self._stdout, self._stderr)
-
-    def __repr__(self):
         if INTERACTIVE:
             return self._interactive_repr()
         else:
@@ -409,27 +554,20 @@ class PipePy:
 
     def _normal_repr(self):
         result = ["PipePy("]
-        if self._args:
-            result.append(', '.join((repr(arg) for arg in self._args)))
-        else:
-            result.append('[]')
-        if self._stdin is not None:
-            result.extend([", _stdin=", reprlib.repr(self._stdin)])
+        result.append(', '.join((repr(arg) for arg in self._args)))
+        if self._left is not None:
+            result.append(f", _left={self._left!r}")
         if self._returncode is not None:
-            result.extend([", returncode=", reprlib.repr(self._returncode)])
-            if self._stdout is not None:
-                result.extend([", stdout=", reprlib.repr(self._stdout)])
-            if self._stderr:
-                result.extend([", stderr=", reprlib.repr(self._stderr)])
-        result.append(')')
+            result.append(f", _returncode={self._returncode}")
+        if self._stdout:
+            result.append(f", _stdout={reprlib.repr(self._stdout)}")
+        if self._stderr:
+            result.append(f", _stderr={reprlib.repr(self._stderr)}")
+        result.append(")")
         return ''.join(result)
 
     def _interactive_repr(self):
-        self._evaluate()
-        result = self.stdout + self.stderr
-        if not self._text:
-            result = result.decode(self._encoding)
-        return result
+        return self.stdout + self.stderr
 
     # Redirect output
     def __gt__(self, filename):
@@ -441,15 +579,26 @@ class PipePy:
                 >>> ps > 'progs.txt'
         """
 
-        if self._text:
-            mode = "w"
-        else:
-            mode = "wb"
-
-        with open(filename, mode, encoding=self._encoding) as f:
+        with open(filename,
+                  "w" if self._text else "wb",
+                  encoding=self._encoding) as f:
             f.write(self.stdout)
 
     def __rshift__(self, filename):
+        """ Write output to file
+
+            Usage:
+
+                >>> ps = PipePy('ps')
+                >>> ps > 'progs.txt'
+        """
+
+        with open(filename,
+                  "a" if self._text else "ab",
+                  encoding=self._encoding) as f:
+            f.write(self.stdout)
+
+    def __lt__(self, filename):
         """ Append output to file
 
             Usage:
@@ -458,31 +607,9 @@ class PipePy:
                 >>> ps >> 'progs/txt'
         """
 
-        if self._text:
-            mode = "a"
-        else:
-            mode = "ab"
+        return self(_left=_File(filename))
 
-        with open(filename, mode, encoding=self._encoding) as f:
-            f.write(self.stdout)
-
-    def __lt__(self, filename):
-        """ Use file as input
-
-            Usage:
-
-                >>> grep = PipePy('grep')
-                >>> grep('python') < 'progs.txt'
-        """
-
-        if self._text:
-            mode = "r"
-        else:
-            mode = "rb"
-
-        with open(filename, mode, encoding=self._encoding) as f:
-            return (iter(f) | self)
-
+    # Pipes
     def __or__(left, right):
         return PipePy._pipe(left, right)
 
@@ -491,133 +618,131 @@ class PipePy:
 
     @staticmethod
     def _pipe(left, right):
-        """ Piping functionality. The supported use-cases are:
+        """ Support pipe operations. Depending on the operands, slightly
+            different behaviors emerge:
 
-            1. `left` is a string and `right` is a `PipePy` instance:
+            1. If both operands are PipePy objects, the returned object will,
+               upon evaluation, start both operands as background processes and
+               connect the left's stdout to the right's stdin
 
-                `left` will be used as `right`'s stdin. `left`'s type will be
-                converted from/to bytes/str according to `right`'s `_text`
-                value. `right` will not be evaluated straight away
+                >>> ls = PipePy('ls')
+                >>> grep = PipePy('grep')
+                >>> print(ls | grep('files'))
+                <<< files.txt
 
-            2. `left` is an iterable and `right` is a `PipePy` instance:
+            2. If only the right operand is a PipePy object, the left operand
+               will be used as input. The left operand can be any iterable
+               object, including lists, strings or generators
 
-                `right` will be evaluated with `_wait=False`. `left` will be
-                iterated over and fed into `right`'s process's stdin. Finally,
-                `right` will be waited for.
+                >>> grep = PipePy('grep')
+                >>> print(["foo\n", "bar\n"] | grep("foo"))
+                <<< foo
 
-            3. `left` and `right` are both `PipePy` instances:
+                >>> def my_input():
+                ...     yield "foo\n"
+                ...     yield "bar\n"
+                >>> print(my_input() | grep("foo"))
+                <<< foo
 
-                If `left` is not evaluated yet, `left`'s stdout file describtor
-                will be used as `right`'s stdin. Otherwise, `left`'s captured
-                stdout will be used as `right`'s input. `right` will not be
-                evaluated
+            3. If only the the left operand is a PipePy object and the right
+               object is a function, then the command will be evaluated and its
+               output will be passed as arguments to the function:
 
-            4. `left` is a `PipePy` instance and `right` is a function
+               - If the function's arguments are a subset of [returncode,
+                 output, errors], the command will be waited and its output
+                 will be passed at once to the function
+               - If the function's arguments are a subset of [stdout, stderr],
+                 the command will be run in the background and its stdout and
+                 stderr streams will be made available to the function
 
-                `left` will be evaluated and `right` will be invoked with
-                `returncode`, `stdout` and `stderr` arguments.
+               The ordering of the arguments doesn't matter since the
+               function's signature will be inspected to determine the
+               appropriate behavior
         """
 
-        if isinstance(left, PipePy):
-            left_is_iterable = False
+        error = TypeError(f"Cannot perform '|' operation on {left!r} and "
+                          f"{right!r}, unsupported operands")
+        if isinstance(left, PipePy) and isinstance(right, PipePy):
+            return right(_left=left)
+        elif isinstance(right, PipePy):
+            if is_iterable(left):
+                return right(_left=left)
+            else:
+                raise error
+        elif isinstance(left, PipePy):
+            if callable(right):
+                return left._send_output_to_function(right)
+            else:
+                raise error
         else:
-            try:
-                iter(left)
-            except TypeError:
-                left_is_iterable = False
-            else:
-                left_is_iterable = True
+            raise error
 
-        if isinstance(left, PipePy):
-            if isinstance(right, PipePy):
-                if left._stdout is not None:
-                    stdin = left._stdout
-                else:
-                    left = left._d()
-                    stdin = left._process.stdout
-                result = right(_stdin=stdin)
-                return result
-            elif callable(right):
-                error = TypeError(f"Cannot pipe {left!r} to {right!r}: "
-                                  "Invalid function signature")
-                parameters = inspect.signature(right).parameters
-                if not parameters:
-                    raise error
-                if not all((value.kind ==
-                            inspect.Parameter.POSITIONAL_OR_KEYWORD
-                            for value in parameters.values())):
-                    raise error
-                keys = set(parameters.keys())
-                if keys <= {'returncode', 'output', 'errors'}:
-                    arguments = {'returncode': left.returncode,
-                                 'output': left.stdout,
-                                 'errors': left.stderr}
-                elif keys <= {'stdout', 'stderr'}:
-                    left = left._d()
-                    arguments = {'stdout': left._process.stdout,
-                                 'stderr': left._process.stderr}
-                else:
-                    raise error
-                kwargs = {key: value
-                          for key, value in arguments.items()
-                          if key in keys}
+    # Help with pipes
+    def _send_output_to_function(self, func):
+        """ Implement the "pipe to function" functionality.  """
 
-                result = right(**kwargs)
-                if not left._wait:
-                    left.wait()
-                return result
-            else:
-                raise TypeError("Unrecognized operands")
-        elif isinstance(left, (bytes, str)):
-            if right._text:
-                try:
-                    left = left.decode(right._encoding)
-                except AttributeError:
-                    pass
-            else:
-                try:
-                    left = left.encode(right._encoding)
-                except AttributeError:
-                    pass
-            return right(_stdin=left)
-        elif left_is_iterable:
-            right = right._d()
-            for chunk in left:
-                if right._text:
-                    try:
-                        chunk = chunk.decode(right._encoding)
-                    except AttributeError:
-                        pass
-                else:
-                    try:
-                        chunk = chunk.encode(right._encoding)
-                    except AttributeError:
-                        pass
-                right._process.stdin.write(chunk)
-                if '\n' in chunk:
-                    right._process.stdin.flush()
-            right.wait()
-            return right
+        error = TypeError(f"Cannot pipe to {func!r}: "
+                          "Invalid function signature")
+        parameters = inspect.signature(func).parameters
+        if not parameters:
+            raise error
+        if not all((value.kind ==
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD
+                    for value in parameters.values())):
+            raise error
+        keys = set(parameters.keys())
+        if keys <= {'returncode', 'output', 'errors'}:
+            arguments = {'returncode': self.returncode,
+                         'output': self.stdout,
+                         'errors': self.stderr}
+        elif keys <= {'stdout', 'stderr'}:
+            self._start_background_job()
+            self._feed_input()
+            arguments = {'stdout': self._process.stdout,
+                         'stderr': self._process.stderr}
         else:
-            raise TypeError("Unrecognized operands")
+            raise error
+        kwargs = {key: value
+                  for key, value in arguments.items()
+                  if key in keys}
+        return func(**kwargs)
 
-    # Context processor
+    # `with` statements
     def __enter__(self):
-        if self._wait:
-            self._context = self._d()
-            return self._context.__enter__()
-        return self._process.stdin, self._process.stdout, self._process.stderr
+        """ Start a job in the background and allow the code block to interact
+            with *both* its input and output:
+
+                >>> grep = PipePy('grep')
+                >>> with grep("foo") as (stdin, stdout, stderr):
+                ...     stdin.write("foo\n")
+                ...     stdin.write("bar\n")
+                ...     stdin.close()
+                ...     print(stdout.read())
+                <<< foo
+        """
+
+        self._start_background_job(stdin_to_pipe=True)
+
+        job = self
+        while isinstance(job._left, PipePy):
+            job = job._left
+
+        return job._process.stdin, self._process.stdout, self._process.stderr
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._context is not None:
-            self._context.wait()
-            self._context = None
-        else:
-            self.wait()
+        job = self
+        while isinstance(job._left, PipePy):
+            job = job._left
+        job._process.stdin.close()
+
+        self.wait()
 
     # Forward calls to background process
-
     def _map_to_background_process(method):
+        """ Expose the `send_signal`, `terminate` and `kill` methods of Popen
+            objects to PipePy objects.
+        """
+
         def func(self, *args, **kwargs):
             if self._process is None:
                 raise TypeError(f"Cannot call '{method}' on non-background "

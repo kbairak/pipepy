@@ -1,7 +1,8 @@
 import itertools
 import random
+from copy import copy
 
-from pipepy import PipePy
+from pipepy import PipePy, cat, grep
 
 student_command = PipePy('python', 'src/tests/playground/math_quiz_student.py')
 teacher_command = PipePy('python', 'src/tests/playground/math_quiz_teacher.py')
@@ -92,8 +93,19 @@ def test_math_quiz_student_command_stops_first():
 
 
 def test_inspect_result():
-    job = teacher_command._d()
+    job = copy(teacher_command)
     with job as (stdin, stdout, stderr):
         python_student(stdin, stdout, range(3))
 
     assert job
+
+
+def test_long_pipe():
+    result = []
+    with (cat | grep("foo") | cat | cat | grep("foo") | cat) as (
+            stdin, stdout, stderr):
+        stdin.write("bar\n")
+        stdin.write("foo\n")
+        stdin.close()
+        result.append(next(stdout).strip())
+    assert result == ["foo"]
