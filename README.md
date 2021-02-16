@@ -211,9 +211,24 @@ evaluated when its output is used. This can be done with the following ways:
    ```python
    from pipepy import echo
    command = echo("hello world")
-   str(command)
+   command.returncode
+   # <<< 0
+   command.stdout
    # <<< 'hello world\n'
+   command.stderr
+   # <<< ''
    ```
+
+- Evaluating the command as a string object
+
+  ```python
+  from pipepy import ls
+  result = str(ls)
+  # or
+  print(ls)
+  ```
+
+  Converting a command to a `str` returns its `stdout`.
 
 - Evaluating the command as a boolean object:
 
@@ -230,17 +245,6 @@ evaluated when its output is used. This can be done with the following ways:
 
   The command will be truthy if its `returncode` is 0.
 
-- Evaluating the command as a string object
-
-  ```python
-  from pipepy import ls
-  result = str(ls)
-  # or
-  print(ls)
-  ```
-
-  Converting a command to a `str` returns its `stdout`.
-
 - Invoking the `.as_table()` method:
 
   ```python
@@ -252,8 +256,6 @@ evaluated when its output is used. This can be done with the following ways:
   ```
 
 - Iterating over a command object:
-
-  This iterates over the lines of the command's `stdout`:
 
   ```python
   from pipepy import ls
@@ -315,7 +317,7 @@ if not all(downloads):
 ```
 
 If you are not interested in the output of a background command, you should
-take care to at some point call `.wait()` on it. Otherwise its process will not
+take care at some point to call `.wait()` on it. Otherwise its process will not
 be waited for and if the parent Python process ends, it will kill all the
 background processes:
 
@@ -329,8 +331,8 @@ download.wait()
 At any point, you can call `pipepy.jobs()` to get a list of non-waited-for
 commands. In case you want to do some cleaning up, there is also a
 `pipepy.wait_jobs()` function. This should be used with care however as, if any
-of the background aren't finished or are stuck, `wait_jobs()` may hang for an
-unknown amount of time.
+of the background jobs aren't finished or are stuck, `wait_jobs()` may hang for
+an unknown amount of time.
 
 ## Redirecting output from/to files
 
@@ -360,8 +362,8 @@ if git.diff(name_only=True) | grep('readme.txt'):
 ```
 
 If the left operand was previously evaluated, then it's output (`stdout`) will
-be passed directly as inputs to the right operand. Otherwise, both commands
-will be executed in parallel and `left`'s output will be streamed into `right`.
+be passed directly as input to the right operand. Otherwise, both commands will
+be executed in parallel and `left`'s output will be streamed into `right`.
 
 ### 2. Left operand is any kind of iterable (including string)
 
@@ -501,7 +503,7 @@ will be closed.
 
 The return value of the pipe operation will be the return value of the
 function. The function can even include the word `yield` and thus return a
-generator that can be fed into another command.
+generator that can be piped into another command.
 
 Putting all of this together, we can do things like:
 
@@ -652,7 +654,8 @@ command:
 ```python
 from pipepy import cat, grep
 
-with (cat | grep("foo") | cat) as (stdin, stdout, stderr):
+command = cat | grep("foo") | cat | cat | cat  # We might as well keep going
+with command as (stdin, stdout, stderr):
     stdin.write("foo1\n")
     stdin.write("bar2\n")
     stdin.write("foo3\n")
@@ -888,7 +891,7 @@ print(pwd())
 # <<< /foo
 ```
 
-But it can be used as a context processor for temporary directory changes:
+But it can also be used as a context processor for temporary directory changes:
 
 ```python
 print(pwd())
@@ -918,7 +921,8 @@ print(os.environ['HOME'])
 # <<< /home/foo/bar
 ```
 
-But it can be used as a context processor for temporary environment changes:
+But it can also be used as a context processor for temporary environment
+changes:
 
 ```python
 print(os.environ['HOME'])
