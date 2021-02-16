@@ -39,15 +39,17 @@ def test_iter():
     assert list(echo("a\nb\nc")) == ["a\n", "b\n", "c\n"]
     assert list(echo('a', 'b', 'c').iter_words()) == ["a", "b", "c"]
 
-    tic = time.time()
+    tic = None
     delay = .01
     for i, line in enumerate(echo_messages(count=3,
                                            delay=delay,
                                            message='hello world {}')):
         toc = time.time()
-        assert toc - tic > delay  # Verify that the message is indeed delayed
-        tic = toc
+        if tic is not None:
+            # Verify that the message is indeed delayed
+            assert toc - tic > .8 * delay
         assert line.strip() == f"hello world {i}"
+        tic = time.time()
 
 
 def test_redirects():

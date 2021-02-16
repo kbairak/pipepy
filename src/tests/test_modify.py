@@ -41,5 +41,5 @@ def test_modifiers():
     assert job._process is not None
     job.wait()
 
-    job = ls.quiet()
-    assert not job._raise_exception
+    job = ls(_raise=False)
+    assert not job._raise

@@ -31,7 +31,7 @@ class PipePy:
     # Init and copies
     def __init__(self, *args, _lazy=False, _left=None, _stream_stdout=None,
                  _stream_stderr=None, _stream=None, _text=True,
-                 _encoding="UTF-8", _raise_exception=None, **kwargs):
+                 _encoding="UTF-8", _raise=None, **kwargs):
         """ Initialize a PipePy object.
 
             Usually you will not need to call this directly, but invoke
@@ -59,8 +59,8 @@ class PipePy:
                 will be automatically converted to the correct type, using the
                 encoding described by `_encoding` (defaults to `UTF-8`)
 
-            - _raise_exception: Whether a command will raise an exception if
-                its returncode is not 0. If not set, the `pipepy.ALWAYS_RAISE`
+            - _raise: Whether a command will raise an exception if its
+                returncode is not 0. If not set, the `pipepy.ALWAYS_RAISE`
                 setting will be respsected (defaults to `False`). If you don't
                 set it, or if you set it to `False`, you can still raise an
                 exception by calling `command.raise_for_returncode()` (similar
@@ -91,7 +91,7 @@ class PipePy:
         self._stream = _stream
         self._text = _text
         self._encoding = _encoding
-        self._raise_exception = _raise_exception
+        self._raise = _raise
 
         self._process = None
         self._input_fed = False
@@ -102,7 +102,7 @@ class PipePy:
 
     def __call__(self, *args, _left=None, _stream_stdout=None,
                  _stream_stderr=None, _stream=None, _text=None, _encoding=None,
-                 _raise_exception=None, **kwargs):
+                 _raise=None, **kwargs):
         """ Make and return a copy of `self`, overriding some of its
             parameters.
 
@@ -121,7 +121,7 @@ class PipePy:
                  _stream is None and
                  _text is None and
                  _encoding is None and
-                 _raise_exception is None and
+                 _raise is None and
                  not kwargs)
 
         args = self._args + list(args)
@@ -137,14 +137,14 @@ class PipePy:
             _text = self._text
         if _encoding is None:
             _encoding = self._encoding
-        if _raise_exception is None:
-            _raise_exception = self._raise_exception
+        if _raise is None:
+            _raise = self._raise
 
         result = PipePy(*args, _lazy=True, _left=_left,
                         _stream_stdout=_stream_stdout,
                         _stream_stderr=_stream_stderr, _stream=_stream,
                         _text=_text, _encoding=_encoding,
-                        _raise_exception=_raise_exception, **kwargs)
+                        _raise=_raise, **kwargs)
         if force:
             result._evaluate()
         return result
@@ -183,24 +183,10 @@ class PipePy:
         return self.__class__(*(self._args + [attr]), _lazy=False)
 
     def __copy__(self):
-        result = PipePy(*self._args, _left=copy(self._left))
-        result._lazy = True
-        return result
-
-    def stream(self):
-        """ Returns a copy with `_stream` set to True. """
-
-        return self(_stream=True)
-
-    def quiet(self):
-        """ Returns a copy with `_raise_exception` set to False.
-
-            Intended to be used when most, but not all commands are supposed to
-            raise exceptions. You can get most commands to raise them with
-            `pipepy.ALWAYS_RAISE = True` and customize the ones that should not
-            with `command = command.quiet()`.
-        """
-        return self(_raise_exception=False)
+        return PipePy(*self._args, _lazy=True, _left=copy(self._left),
+                      _stream_stdout=self._stream_stdout,
+                      _stream_stderr=self._stderr, _stream=self._stream,
+                      _text=self._text, _encoding=self._encoding)
 
     @staticmethod
     def _convert_args(args, kwargs):
@@ -373,32 +359,6 @@ class PipePy:
         self._input_fed = True
 
     # Control lifetime
-    def wait(self):
-        """ Wait for a process to finish and store the result.
-
-            This is called internally by pipe operations, but can also be
-            called by the user for a background command that has been created
-            with `.delay()`.
-
-                >>> sleep = PipePy('sleep')
-                >>> job = sleep(5).delay()
-                >>> job.wait()
-                >>> print("Job finished")
-        """
-
-        try:
-            self._stdout, self._stderr = self._process.communicate()
-        except ValueError:
-            self._stdout = self._process.stdout.read()
-            self._stderr = self._process.stderr.read()
-        self._returncode = self._process.wait()
-
-        raise_exception = self._raise_exception
-        if raise_exception is None:
-            raise_exception = ALWAYS_RAISE
-        if raise_exception:
-            self.raise_for_returncode()
-
     def delay(self):
         """ Create and return a copy of `self` and perform 2 out of 3 steps of
             its evaluation, ie don't wait for its result.
@@ -422,6 +382,38 @@ class PipePy:
         result._start_background_job()
         result._feed_input()
         return result
+
+    def wait(self):
+        """ Wait for a process to finish and store the result.
+
+            This is called internally by pipe operations, but can also be
+            called by the user for a background command that has been created
+            with `.delay()`.
+
+                >>> sleep = PipePy('sleep')
+                >>> job = sleep(5).delay()
+                >>> job.wait()
+                >>> print("Job finished")
+        """
+
+        try:
+            self._stdout, self._stderr = self._process.communicate()
+        except ValueError:
+            if self._process.stdout is not None:
+                self._stdout = self._process.stdout.read()
+            else:
+                self._stdout = "" if self._text else b""
+            if self._process.stderr is not None:
+                self._stderr = self._process.stderr.read()
+            else:
+                self._stderr = "" if self._text else b""
+        self._returncode = self._process.wait()
+
+        raise_exception = self._raise
+        if raise_exception is None:
+            raise_exception = ALWAYS_RAISE
+        if raise_exception:
+            self.raise_for_returncode()
 
     def raise_for_returncode(self):
         """ Raise an exception if the command's returncode is not 0.
