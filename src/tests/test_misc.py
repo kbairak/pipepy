@@ -1,6 +1,6 @@
 import os
 
-from pipepy import cd, export
+from pipepy import cd, export, jobs, sleep, wait_jobs
 
 
 def pwd():
@@ -41,3 +41,19 @@ def test_export():
     assert os.environ['PATH'] == original_path + ":FOO"
 
     os.environ['PATH'] = original_path
+
+
+def test_jobs():
+    command = sleep(.01).delay()
+    assert len(jobs()) == 1
+    assert jobs()[0]._process.pid == command._process.pid
+
+    command.wait()
+    assert len(jobs()) == 0
+
+    command = sleep(.01).delay()
+    assert len(jobs()) == 1
+    assert jobs()[0]._process.pid == command._process.pid
+
+    wait_jobs()
+    assert len(jobs()) == 0

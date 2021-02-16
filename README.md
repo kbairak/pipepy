@@ -325,6 +325,13 @@ download = wget('...').delay()
 # Do something else
 download.wait()
 ```
+
+At any point, you can call `pipepy.jobs()` to get a list of non-waited-for
+commands. In case you want to do some cleaning up, there is also a
+`pipepy.wait_jobs()` function. This should be used with care however as, if any
+of the background aren't finished or are stuck, `wait_jobs()` may hang for an
+unknown amount of time.
+
 ## Redirecting output from/to files
 
 The `>`, `>>` and `<` operators work similar to how they work in a shell:
@@ -1089,10 +1096,7 @@ ways:
 
 ## TODOs
 
-- [x] Long pipe chains (eg `my_stdin() | grep('-E', r'\b17$') | greedy_print`)
+- [x] Context processors for `cd` and/or environment
+- [x] `jobs` implementation
 - [ ] Ability to source bash files
-- [ ] Context processors for `cd` and/or environment
-- [x] Add more docstrings
-- [x] Stream and capture `stdout` and `stderr` at the same time
 - [ ] Python virtual environments (maybe sourcing bash files will suffice)
-- [ ] `jobs` implementation

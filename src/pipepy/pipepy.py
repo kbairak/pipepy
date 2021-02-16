@@ -1,5 +1,6 @@
 import inspect
 import reprlib
+import types
 from copy import copy
 from glob import glob
 from subprocess import PIPE, Popen
@@ -10,6 +11,17 @@ from .utils import _File, is_iterable
 ALWAYS_RAISE = False
 ALWAYS_STREAM = False
 INTERACTIVE = False
+
+_JOBS = {}
+
+
+def jobs():
+    return list(_JOBS.values())
+
+
+def wait_jobs():
+    for command in jobs():
+        command.wait()
 
 
 def set_always_raise(value):
@@ -300,6 +312,7 @@ class PipePy:
         self._process = Popen(self._args,
                               stdin=stdin, stdout=stdout, stderr=stderr,
                               text=self._text)
+        _JOBS[self._process.pid] = self
 
     def _feed_input(self):
         """ If the command has been configured to receive special input via its
@@ -398,7 +411,7 @@ class PipePy:
 
         try:
             self._stdout, self._stderr = self._process.communicate()
-        except ValueError:
+        except Exception:
             if self._process.stdout is not None:
                 self._stdout = self._process.stdout.read()
             else:
@@ -407,7 +420,16 @@ class PipePy:
                 self._stderr = self._process.stderr.read()
             else:
                 self._stderr = "" if self._text else b""
+        try:
+            del _JOBS[self._process.pid]
+        except KeyError:
+            pass
         self._returncode = self._process.wait()
+
+        job = self
+        while isinstance(job._left, PipePy):
+            job = job._left
+            job.wait()
 
         raise_exception = self._raise
         if raise_exception is None:
@@ -488,6 +510,7 @@ class PipePy:
             self._start_background_job()
             self._feed_input()
             yield from self._process.stdout
+            self.wait()
 
     def iter_words(self):
         """ Iterate over the *words* of the output of the command.
@@ -687,17 +710,30 @@ class PipePy:
             arguments = {'returncode': self.returncode,
                          'output': self.stdout,
                          'errors': self.stderr}
+            kwargs = {key: value
+                      for key, value in arguments.items()
+                      if key in keys}
+            return func(**kwargs)
         elif keys <= {'stdout', 'stderr'}:
             self._start_background_job()
             self._feed_input()
             arguments = {'stdout': self._process.stdout,
                          'stderr': self._process.stderr}
+            kwargs = {key: value
+                      for key, value in arguments.items()
+                      if key in keys}
+            result = func(**kwargs)
+            if isinstance(result, types.GeneratorType):
+                # Make returned generator wait for the current command on exit
+                def generator():
+                    yield from result
+                    self.wait()
+                return generator()
+            else:
+                self.wait()
+                return result
         else:
             raise error
-        kwargs = {key: value
-                  for key, value in arguments.items()
-                  if key in keys}
-        return func(**kwargs)
 
     # `with` statements
     def __enter__(self):
@@ -728,6 +764,10 @@ class PipePy:
         job._process.stdin.close()
 
         self.wait()
+        job = self
+        while isinstance(job._left, PipePy):
+            job = job._left
+            job.wait()
 
     # Forward calls to background process
     def _map_to_background_process(method):
