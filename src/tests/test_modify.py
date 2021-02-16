@@ -37,15 +37,9 @@ def test_getattr():
 
 
 def test_modifiers():
-    assert not (PipePy('ls')._b)._text
-
-    job = ls._d()
-    assert not job._wait
+    job = ls.delay()
+    assert job._process is not None
     job.wait()
 
-    ls_stream = PipePy('ls')._s()
-    assert ls_stream._stream_stdout
-    assert ls_stream._stream_stderr
-    assert ls_stream.stdout is None
-    assert ls_stream.stderr is None
-    assert ls_stream
+    job = ls(_raise=False)
+    assert not job._raise

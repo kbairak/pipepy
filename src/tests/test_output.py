@@ -23,7 +23,7 @@ def test_bool():
 
 def test_str():
     assert str(echo("hello world")) == "hello world\n"
-    assert str(echo("καλημέρα")._b) == "καλημέρα\n"
+    assert str(echo("καλημέρα", _text=False)) == "καλημέρα\n"
     assert (str("καλημέρα".encode('iso-8859-7') |
                 cat(_text=False, _encoding='iso-8859-7')) ==
             "καλημέρα")
@@ -37,18 +37,19 @@ def test_as_table():
 
 def test_iter():
     assert list(echo("a\nb\nc")) == ["a\n", "b\n", "c\n"]
+    assert list(echo('a', 'b', 'c').iter_words()) == ["a", "b", "c"]
 
-    tic = time.time()
+    tic = None
     delay = .01
     for i, line in enumerate(echo_messages(count=3,
                                            delay=delay,
                                            message='hello world {}')):
         toc = time.time()
-        assert toc - tic > delay  # Verify that the message is indeed delayed
-        tic = toc
+        if tic is not None:
+            # Verify that the message is indeed delayed
+            assert toc - tic > .8 * delay
         assert line.strip() == f"hello world {i}"
-
-    assert list(echo('a', 'b', 'c').iter_words()) == ["a", "b", "c"]
+        tic = time.time()
 
 
 def test_redirects():
@@ -67,7 +68,7 @@ def test_redirects():
 
 
 def test_streams():
-    result = ls._s()
+    result = ls(_stream=True)
     assert result
     assert result._stdout is None
     assert result._stderr is None
@@ -78,7 +79,7 @@ def test_streams():
     assert result._stdout is None
     assert result._stderr is None
 
-    result = ls._c()
+    result = ls(_stream=False)
     assert result
     assert result._stdout
     assert result._stderr is not None

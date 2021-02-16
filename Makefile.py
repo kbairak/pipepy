@@ -19,9 +19,9 @@ def covtest():
 
 
 def html(covtest):
-    from pipepy import coverage, firefox
+    from pipepy import coverage, xdg_open
     coverage.html()
-    firefox("htmlcov/index.html")()
+    xdg_open("htmlcov/index.html")()
 
 
 def watchtest():

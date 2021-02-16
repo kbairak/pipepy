@@ -8,15 +8,15 @@ A Python library for invoking and interacting with shell commands.
 * [Why? Comparison with other similar frameworks](#why-comparison-with-other-similar-frameworks)
 * [Installation and testing](#installation-and-testing)
 * [Intro, basic usage](#intro-basic-usage)
-* [Laziness](#laziness)
 * [Customizing commands](#customizing-commands)
-* [Redirecting output to files](#redirecting-output-to-files)
+* [Laziness](#laziness)
+   * [Background commands](#background-commands)
+* [Redirecting output from/to files](#redirecting-output-fromto-files)
 * [Pipes](#pipes)
    * [1. Both operands are commands](#1-both-operands-are-commands)
-   * [2. Left operand is a string](#2-left-operand-is-a-string)
-   * [3. Left operand is any kind of iterable](#3-left-operand-is-any-kind-of-iterable)
-   * [4. Right operand is a function](#4-right-operand-is-a-function)
-* [Running in the background](#running-in-the-background)
+   * [2. Left operand is any kind of iterable (including string)](#2-left-operand-is-any-kind-of-iterable-including-string)
+   * [3. Right operand is a function](#3-right-operand-is-a-function)
+* [Interacting with background processes](#interacting-with-background-processes)
    * [1. Incrementally sending data to a command](#1-incrementally-sending-data-to-a-command)
    * [2. Incrementally reading data from a command](#2-incrementally-reading-data-from-a-command)
    * [3. Reading data from and writing data to a command](#3-reading-data-from-and-writing-data-to-a-command)
@@ -29,7 +29,7 @@ A Python library for invoking and interacting with shell commands.
    * [pymake variables](#pymake-variables)
 * [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Fri Feb 12 09:28:03 AM EET 2021 -->
+<!-- Added by: kbairak, at: Tue Feb 16 05:27:10 PM EET 2021 -->
 
 <!--te-->
 
@@ -111,99 +111,6 @@ from pipepy import PipePy
 
 custom_command = PipePy('./bin/custom')
 python_script = PipePy('python', 'script.py')
-```
-
-## Laziness
-
-Commands are evaluated lazily. For example, this will not actually do anything:
-
-```python
-from pipepy import wget
-wget('http://...')
-```
-
-A command will be evaluated when its output is used. This can be done with the
-following ways:
-
-- Accessing the `returncode`, `stdout` and `stderr` properties
-
-- Evaluating the command as a boolean object:
-
-  ```python
-  from pipepy import ls, grep
-  if ls | grep('info.txt'):
-      print("info.txt found")
-  ```
-
-  The command will be truthy if its `returncode` is 0.
-
-- Evaluating the command as a string object
-
-  ```python
-  from pipepy import ls
-  result = str(ls)
-  # or
-  print(ls)
-  ```
-
-  Converting a command to a `str` returns its `stdout`.
-
-- Invoking the `.as_table()` method:
-
-  ```python
-  from pipepy import ps
-  ps.as_table()
-  # <<< [{'PID': '11233', 'TTY': 'pts/4', 'TIME': '00:00:01', 'CMD': 'zsh'},
-  # ...  {'PID': '17673', 'TTY': 'pts/4', 'TIME': '00:00:08', 'CMD': 'ptipython'},
-  # ...  {'PID': '18281', 'TTY': 'pts/4', 'TIME': '00:00:00', 'CMD': 'ps'}]
-  ```
-
-- Iterating over a command object:
-
-  This iterates over the lines of the command's `stdout`:
-
-  ```python
-  from pipepy import ls
-  for filename in ls:
-      print(filename.upper)
-  ```
-
-  `command.iter_words()` iterates over the words of the command's `stdout`:
-
-  ```python
-  from pipepy import ps
-  list(ps.iter_words())
-  # <<< ['PID', 'TTY', 'TIME', 'CMD',
-  # ...  '11439', 'pts/5', '00:00:00', 'zsh',
-  # ...  '15532', 'pts/5', '00:00:10', 'ptipython',
-  # ...  '15539', 'pts/5', '00:00:00', 'ps']
-  ```
-
-- Redirecting the output to something else (this will be further explained
-  below):
-
-  ```python
-  from pipepy import ls, grep
-  ls > 'files.txt'
-  ls >> 'files.txt'
-  ls | grep('info.txt')  # `ls` will be evaluated, `grep` will not
-  ls | lambda output: output.upper()
-  ```
-
-- Redirecting from an iterable (this will be further explained below):
-
-  ```python
-  from pipepy import grep
-  (f"{i}\n" for i in range(5)) | grep(2)
-  ```
-
-If you are not interested in the output of a command but want to evaluate it
-nevertheless, you can call it with empty arguments. So, this will actually
-invoke the command (and wait for it to finish).
-
-```python
-from pipepy import wget
-wget('http://...')()
 ```
 
 ## Customizing commands
@@ -295,7 +202,140 @@ There is a number of other ways you can customize a command:
   ls -l -t  # Equivalent to ls('-l', '-t')
   ```
 
-## Redirecting output to files
+
+## Laziness
+
+Commands are evaluated lazily. For example, this will not actually do anything:
+
+```python
+from pipepy import wget
+wget('http://...')
+```
+
+Invoking a `PipePy` instance with non-empty arguments will return an
+**unevaluated** copy supplied with the extra arguments. A command will be
+evaluated when its output is used. This can be done with the following ways:
+
+- Accessing the `returncode`, `stdout` and `stderr` properties:
+
+   ```python
+   from pipepy import echo
+   command = echo("hello world")
+   str(command)
+   # <<< 'hello world\n'
+   ```
+
+- Evaluating the command as a boolean object:
+
+  ```python
+  from pipepy import ls, grep
+  command = ls | grep('info.txt')
+
+  bool(command)
+  # <<< True
+
+  if command:
+      print("info.txt found")
+  ```
+
+  The command will be truthy if its `returncode` is 0.
+
+- Evaluating the command as a string object
+
+  ```python
+  from pipepy import ls
+  result = str(ls)
+  # or
+  print(ls)
+  ```
+
+  Converting a command to a `str` returns its `stdout`.
+
+- Invoking the `.as_table()` method:
+
+  ```python
+  from pipepy import ps
+  ps.as_table()
+  # <<< [{'PID': '11233', 'TTY': 'pts/4', 'TIME': '00:00:01', 'CMD': 'zsh'},
+  # ...  {'PID': '17673', 'TTY': 'pts/4', 'TIME': '00:00:08', 'CMD': 'ptipython'},
+  # ...  {'PID': '18281', 'TTY': 'pts/4', 'TIME': '00:00:00', 'CMD': 'ps'}]
+  ```
+
+- Iterating over a command object:
+
+  This iterates over the lines of the command's `stdout`:
+
+  ```python
+  from pipepy import ls
+  for filename in ls:
+      print(filename.upper)
+  ```
+
+  `command.iter_words()` iterates over the words of the command's `stdout`:
+
+  ```python
+  from pipepy import ps
+  list(ps.iter_words())
+  # <<< ['PID', 'TTY', 'TIME', 'CMD',
+  # ...  '11439', 'pts/5', '00:00:00', 'zsh',
+  # ...  '15532', 'pts/5', '00:00:10', 'ptipython',
+  # ...  '15539', 'pts/5', '00:00:00', 'ps']
+  ```
+
+- Redirecting the output to something else (this will be further explained
+  below):
+
+  ```python
+  from pipepy import ls, grep
+  ls > 'files.txt'
+  ls >> 'files.txt'
+  ls | grep('info.txt')  # `ls` will be evaluated, `grep` will not
+  ls | lambda output: output.upper()
+  ```
+
+If you are not interested in the output of a command but want to evaluate it
+nevertheless, you can call it with empty arguments. So, this will actually
+invoke the command (and wait for it to finish).
+
+```python
+from pipepy import wget
+wget('http://...')()
+```
+
+### Background commands
+
+Calling `.delay()` on a `PipePy` instance will return a copy that, although not
+evaluated, will have started running in the background (taking inspiration from
+Celery's [`.delay()`](https://docs.celeryproject.org/en/stable/reference/celery.app.task.html#celery.app.task.Task.delay)
+method for the name). Again, if you try to access its output, it will perform
+the rest of the evaluation process, which is simply to wait for it to finish:
+
+```python
+from pipepy import wget
+urls = [...]
+
+# All downloads will happen in the background simultaneously
+downloads = [wget(url).delay() for url in urls]
+
+# You can do something else here in Python while the downloads are working
+
+# This will call __bool__ on all downloads and thus wait for them
+if not all(downloads):
+   print("Some downloads failed")
+```
+
+If you are not interested in the output of a background command, you should
+take care to at some point call `.wait()` on it. Otherwise its process will not
+be waited for and if the parent Python process ends, it will kill all the
+background processes:
+
+```python
+from pipepy import wget
+download = wget('...').delay()
+# Do something else
+download.wait()
+```
+## Redirecting output from/to files
 
 The `>`, `>>` and `<` operators work similar to how they work in a shell:
 
@@ -326,18 +366,7 @@ If the left operand was previously evaluated, then it's output (`stdout`) will
 be passed directly as inputs to the right operand. Otherwise, both commands
 will be executed in parallel and `left`'s output will be streamed into `right`.
 
-### 2. Left operand is a string
-
-If the left operand is a string, it will be used as the command's stdin:
-
-```python
-from pipepy import grep
-result = "John is 18 years old\nMary is 25 years old" | grep("Mary")
-print(result)
-# <<< Mary is 25 years old
-```
-
-### 3. Left operand is any kind of iterable
+### 2. Left operand is any kind of iterable (including string)
 
 If the left operand is any kind of iterable, its elements will be fed to the
 command's stdin one by one:
@@ -363,7 +392,55 @@ print(result)
 # ... 17
 ```
 
-### 4. Right operand is a function
+If it's a string, it will be fed all at once
+
+```python
+result = "John is 18 years old\nMary is 25 years old" | grep("Mary")
+
+# Equivalent to
+
+result = ["John is 18 years old\nMary is 25 years old"] | grep("Mary")
+```
+
+In both cases, ie in all cases where the right operand is a `PipePy` object,
+the return value of the pipe operation will be an **unevaluated** copy, which
+will be evaluated when we try to access its output. This means that we can take
+advantage of our usual background functionality:
+
+```python
+from pipepy import find, xargs
+command = find('.') | xargs.wc
+command = command.delay()
+
+# Do something else in the meantime
+
+for line in command:  # Here we wait for the command to finish
+    linecount, wordcount, charcount, filename = line.split()
+    # ...
+```
+
+It also means that the left operand, if it's an iterable will be consumed when
+the command is evaluated.
+
+```python
+from pipepy import grep
+
+iterable = (line for line in ["foo\n", "bar\n"])
+command = iterable | grep("foo")
+command.stdout
+# <<< 'foo\n'
+list(iterable)
+# <<< []
+
+iterable = (line for line in ["foo\n", "bar\n"])
+command = iterable | grep("foo")
+list(iterable)  # Lets consume the iterable prematurely
+# <<< ["foo\n", "bar\n"]
+command.stdout
+# <<< ''
+```
+
+### 3. Right operand is a function
 
 The function's arguments need to either be:
 
@@ -396,8 +473,9 @@ wc('*') | lines
 # ... File total has 202 lines, 609 words and 5488 characters
 ```
 
-In the second case, the command will be executed in the background and its
-`stdout` and `stderr` streams will be made available to the function.
+In the second case, the command and the function will be executed in parallel
+and the command's `stdout` and `stderr` streams will be made available to the
+function.
 
 ```python
 import re
@@ -420,44 +498,36 @@ ping('-c', 30, "google.com") | mean_ping
 # ... Mean time is 72.19666666666667 ms
 ```
 
-## Running in the background
+If the command ends before the function, then `next(stdout)` will raise a
+`StopIteration`. If the function ends before the command, the command's `stdin`
+will be closed.
 
-You can run commands in the background by calling the `_d` (mnemonic:
-**d**aemon) attribute. At a later point you can wait for them to finish with
-`.wait()`.
+The return value of the pipe operation will be the return value of the
+function. The function can even include the word `yield` and thus return a
+generator that can be fed into another command.
+
+Putting all of this together, we can do things like:
 
 ```python
-import time
-from pipepy import sleep
+from pipepy import cat, grep
 
-def main():
-   start = time.time()
+def my_input():
+    yield "line one\n"
+    yield "line two\n"
+    yield "line two\n"
+    yield "something else\n"
+    yield "line three\n"
 
-   print(f"Starting background process at {time.time() - start}")
-   result = sleep(3)._d()
+def my_output(stdout):
+    for line in stdout:
+        yield line.upper()
 
-   print(f"Printing message at {time.time() - start}")
-
-   print(f"Waiting for 1 second in python at {time.time() - start}")
-   time.sleep(1)
-
-   print(f"Printing message at {time.time() - start}")
-
-   print(f"Waiting for process to finish at {time.time() - start}")
-   result.wait()
-
-   print(f"Process finished at {time.time() - start}")
-
-main()
-# <<< Starting background process    at 0.0000004768371582031
-# ... Printing message               at 0.0027723312377929688
-# ... Waiting for 1 second in python at 0.0027921199798583984
-# ... Printing message               at 1.0040225982666016
-# ... Waiting for process to finish  at 1.0040972232818604
-# ... Process finished               at 3.004188776016235
+print(my_input() | cat | grep('line') | my_output | grep("TWO"))
+# <<< LINE TWO
+# ... LINE TWO
 ```
 
-**Interracting with background processes**
+## Interacting with background processes
 
 There are 3 ways to interact with a background process: _read-only_,
 _write-only_ and _read/write_. We have already covered _read-only_ and
@@ -466,8 +536,9 @@ _write-only_:
 ### 1. Incrementally sending data to a command
 
 This is done by piping from an iterable to a command. The command actually runs
-in the background and the iterable's data is fed to it as it becomes available.
-We will slightly modify the previous example to better demonstrate this:
+in in parallel with the iterable and the iterable's data is fed to the command
+as it becomes available. We will slightly modify the previous example to better
+demonstrate this:
 
 ```python
 import random
@@ -480,7 +551,8 @@ def my_stdin():
         time.sleep(.01)
         yield f"{time.time() - start} {random.randint(1, 100)}\n"
 
-my_stdin() | grep('-E', r'\b17$', _stream_stdout=True)
+command = my_stdin() | grep('-E', r'\b17$', _stream_stdout=True)
+command()
 # <<< 0.3154888153076172 17
 # ... 1.5810892581939697 17
 # ... 1.7773401737213135 17
@@ -489,13 +561,17 @@ my_stdin() | grep('-E', r'\b17$', _stream_stdout=True)
 # ... 4.511774301528931  17
 ```
 
-Here, `grep` is actually run in the background and matches are printed as they
-are found since the command's output is being streamed to the console, courtesy
-of the `_stream_stdout` argument (more on this [below](#streaming-to-console)).
+Here, `grep` is actually run in in parallel with the generator and matches are
+printed as they are found since the command's output is being streamed to the
+console, courtesy of the `_stream_stdout` argument (more on this
+[below](#streaming-to-console)).
 
 ### 2. Incrementally reading data from a command
 
-This can be done by iterating over a command's output:
+This can be done either by piping the output of a command to a function with a
+subset of `stdin`, `stdout` and `stderr` as its arguments, as we demonstrated
+[before](#3-right-operand-is-a-function), or by iterating over a command's
+output:
 
 ```python
 import time
@@ -514,12 +590,9 @@ for line in ping('-c', 3, 'google.com'):
 # ... 2.129910707473755   RTT MIN/AVG/MAX/MDEV = 71.827/73.507/75.253/1.399 MS
 ```
 
-Again, the `ping` command is actually run in the background and each line is
-given to the body of the for-loop as it becomes available.
-
-Another way is to pipe the command to a function that has a subset of `stdin`
-and `stdout` as its arguments, as we demonstrated
-[before](#4-right-operand-is-a-function).
+Again, the `ping` command is actually run in parallel with the body of the
+for-loop and each line is given to the body of the for-loop as it becomes
+available.
 
 ### 3. Reading data from and writing data to a command
 
@@ -572,23 +645,23 @@ You need to remember to end lines fed to `stdin` with a newline character if
 the command expects it. Also, don't forget to call `stdin.flush()` every now
 and then.
 
-If you want to capture the `returncode` of the command after the `with` block
-finishes, you must call it on a background command, which will have been waited
-for when the block ends:
-
+You can call `with` on a pipe expression that involves `PipePy` objects. In
+that case, each `PipePy` object's `stdout` will be connected to the next one's
+`stdin`, the `stdin` offered to the body of the `with` block will be the
+`stdin` of the leftmost command and the `stdout` and `stderr` offered to the
+body of the `with` block will be the `stdout` and `stderr` of the rightmost
+command:
 
 ```python
-from pipepy import math_quiz
+from pipepy import cat, grep
 
-job = math_quiz._d()
-
-with job as (stdin, stdout, stderr):
-    ...
-
-if job:  # No need to `job.wait()`
-    print("Math quiz successful")
-else:
-    print("Math quiz failed")
+with (cat | grep("foo") | cat) as (stdin, stdout, stderr):
+    stdin.write("foo1\n")
+    stdin.write("bar2\n")
+    stdin.write("foo3\n")
+    stdin.close()
+    assert next(stdout).strip() == "foo1"
+    assert next(stdout).strip() == "foo3"
 ```
 
 ## Binary mode
@@ -607,11 +680,12 @@ print(result.stdout)
 
 `gzip` cannot work in text mode because its output is binary data that cannot
 be utf-8-decoded. When text mode is not desirable, a command can be converted
-to binary mode by accessing the `_b` (mnemonic: **b**inary) attribute:
+to binary mode setting its `_text` parameter to `False`:
 
 ```python
 from pipepy import gzip
-result = "hello world" | gzip._b
+gzip = gzip(_text=False)
+result = "hello world" | gzip
 print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\xcbH\xcd\xc9\xc9W(\xcf/\xcaI\xe1\x02\x00-;\x08\xaf\x0c\x00\x00\x00'
 ```
@@ -623,10 +697,11 @@ the `_encoding` keyword argument:
 
 ```python
 from pipepy import gzip
-result = "καλημέρα" | gzip._b
+gzip = gzip(_text=False)
+result = "καλημέρα" | gzip
 print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\x01\x10\x00\xef\xff\xce\xba\xce\xb1\xce\xbb\xce\xb7\xce\xbc\xce\xad\xcf\x81\xce\xb1"\x15g\xab\x10\x00\x00\x00'
-result = "καλημέρα" | gzip._b(_encoding="iso-8859-7")
+result = "καλημέρα" | gzip(_encoding="iso-8859-7")
 print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03{\xf5\xf0\xf5\xf37w?>\x04\x00\x1c\xe1\xc0\xf7\x08\x00\x00\x00'
 ```
@@ -684,13 +759,13 @@ interact with interactive commands. Consider the following 2 examples:
 
 Also, during a script, you may not be interested in capturing the output of a
 command but may want to stream it to the console to show the command's output
-to the user. A shortcut for setting both `_stream_stdout` and `_stream_stderr`
-to `True` is the `_s` (mnemonic: **s**tream) attribute:
+to the user. You can force a command sto stream its whole output by setting the
+`_stream` parameter:
 
 ```python
 from pipepy import wget
 
-wget('https://...')._s()
+wget('https://...', _stream=True)()
 ```
 
 While `stdout` and `stderr` will not be captured, `returncode` will and thus
@@ -699,7 +774,7 @@ you can still use the command in boolean expressions:
 ```python
 from pipepy import wget
 
-if wget('https://...')._s:
+if wget('https://...', _stream=True):
      print("Download succeeded")
 else:
      print("Download failed")
@@ -713,12 +788,12 @@ the default behavior. This may be desirable in some situations, like Makefiles
 import pipepy
 from pipepy import ls
 pipepy.set_always_stream(True)
-ls()  # Alsost equivalent to `ls._s()`
+ls()  # Alsost equivalent to `ls(_stream=True)()`
 pipepy.set_always_stream(False)
 ```
 
-Similarly to how `._s` forces a command to stream its output to the console,
-`._c` (mnemonic **c**apture) forces it to capture its output even if
+Similarly to how setting `_stream=True` forces a command to stream its output
+to the console, setting `_stream=False` forces it to capture its output even if
 `set_always_stream` has been called:
 
 ```python
@@ -726,8 +801,8 @@ import pipepy
 from pipepy import ls
 
 pipepy.set_always_stream(True)
-ls()     # Will stream its output
-ls._c()  # Will capture its output
+ls()                 # Will stream its output
+ls(_stream=False)()  # Will capture its output
 pipepy.set_always_stream(False)
 ```
 
@@ -755,15 +830,6 @@ except PipePyError as exc:
     # <<< ping: asdf: Name or service not known
 ```
 
-You can call `._r` (mnemonic **r**aise) on a command to have it always raise an
-exception upon evaluation if its returncode ends up not being zero:
-
-```python
-from pipepy import ping
-ping("asdf")._r()
-# <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
-```
-
 You can call `pipepy.set_always_raise(True)` to have **all** commands raise an
 exception if their returncode is not zero.
 
@@ -775,8 +841,8 @@ ping("asdf")()
 # <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
 ```
 
-If "always raise" is set, you can modify a command to not raise an exception by
-calling `._q` (mnemonic **q**uiet) on it.
+If "always raise" is set, you can still force a command to suppress its
+exception by setting `_raise=False`:
 
 ```python
 import pipepy
@@ -789,7 +855,7 @@ except Exception as exc:
 # <<< PipePyError: (2, '', 'ping: asdf: Name or service not known\n')
 
 try:
-    ping("asdf")._q()  # Will not raise an exception
+    ping("asdf", _raise=False)()  # Will not raise an exception
 except Exception as exc:
     print(exc)
 ```
@@ -907,7 +973,7 @@ from pipepy import pytest
 DEFAULT_PYMAKE_TARGET = "test"
 
 def test():
-    pytest._s()
+    pytest(_stream=True)()
 ```
 
 ### `pymake` variables
@@ -954,11 +1020,9 @@ ways:
 
 ## TODOs
 
-- [ ] Long pipe chains (eg `my_stdin() | grep('-E', r'\b17$') | greedy_print`)
+- [x] Long pipe chains (eg `my_stdin() | grep('-E', r'\b17$') | greedy_print`)
 - [ ] Ability to source bash files
-- [x] Pass arguments to `pymake` (see what other tricks `make` does for
-      inspiration)
 - [ ] Context processors for `cd` and/or environment
-- [ ] Add more docstrings
-- [ ] Stream and capture `stdout` and `stderr` at the same time
+- [x] Add more docstrings
+- [x] Stream and capture `stdout` and `stderr` at the same time
 - [ ] Python virtual environments (maybe sourcing bash files will suffice)
