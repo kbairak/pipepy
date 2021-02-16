@@ -37,7 +37,7 @@ def debugtest():
 def checks():
     from pipepy import flake8, isort
     flake8()
-    isort('.')()
+    isort('.', check_only=True)()
 
 
 def clean():
