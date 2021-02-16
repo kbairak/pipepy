@@ -13,23 +13,13 @@ A Python library for invoking and interacting with shell commands.
    * [Background commands](#background-commands)
 * [Redirecting output from/to files](#redirecting-output-fromto-files)
 * [Pipes](#pipes)
-   * [1. Both operands are commands](#1-both-operands-are-commands)
-   * [2. Left operand is any kind of iterable (including string)](#2-left-operand-is-any-kind-of-iterable-including-string)
-   * [3. Right operand is a function](#3-right-operand-is-a-function)
 * [Interacting with background processes](#interacting-with-background-processes)
-   * [1. Incrementally sending data to a command](#1-incrementally-sending-data-to-a-command)
-   * [2. Incrementally reading data from a command](#2-incrementally-reading-data-from-a-command)
-   * [3. Reading data from and writing data to a command](#3-reading-data-from-and-writing-data-to-a-command)
-* [Binary mode](#binary-mode)
-* [Streaming to console](#streaming-to-console)
-* [Exceptions](#exceptions)
-* [Utils](#utils)
+* [Altering the behavior of commands](#altering-the-behavior-of-commands)
+* [Miscellaneous](#miscellaneous)
 * ["Interactive" mode](#interactive-mode)
 * [pymake](#pymake)
-   * [pymake variables](#pymake-variables)
-* [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Tue Feb 16 05:27:10 PM EET 2021 -->
+<!-- Added by: kbairak, at: Tue Feb 16 09:37:02 PM EET 2021 -->
 
 <!--te-->
 
@@ -664,7 +654,9 @@ with (cat | grep("foo") | cat) as (stdin, stdout, stderr):
     assert next(stdout).strip() == "foo3"
 ```
 
-## Binary mode
+## Altering the behavior of commands
+
+### Binary mode
 
 All commands are executed in text mode, which means that they deal with `str`
 objects. This can cause problems. For example:
@@ -706,7 +698,7 @@ print(result.stdout)
 # <<< b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03{\xf5\xf0\xf5\xf37w?>\x04\x00\x1c\xe1\xc0\xf7\x08\x00\x00\x00'
 ```
 
-## Streaming to console
+### Streaming to console
 
 During invocation, you can set the `_stream_stdout` and `_stream_stderr`
 keyword arguments to `True`. This means that the respective stream will not be
@@ -806,7 +798,7 @@ ls(_stream=False)()  # Will capture its output
 pipepy.set_always_stream(False)
 ```
 
-## Exceptions
+### Exceptions
 
 You can call `.raise_for_returncode()` on an **evaluated** result to raise an
 exception if its returncode is not 0 (think of
@@ -860,12 +852,89 @@ except Exception as exc:
     print(exc)
 ```
 
-## Utils
+## Miscellaneous
 
-Since changing the current working directory or the environment in a subprocess
-has no effect on the current process, we include the `pipepy.cd` and
-`pipepy.export` functions. These are not `PipePy` instances but simple aliases
-to `os.chdir` and `os.environ.__setitem__` respectively.
+`.terminate()`, `.kill()` and `.send_signal()` simply forward the method call
+to the underlying
+[`Popen`](https://docs.python.org/3/library/subprocess.html#popen-objects)
+object.
+
+Here are some utilities implemented within `pipepy` that don't make use of
+shell subprocesses, but we believe are useful for bash scripting.
+
+### cd
+
+In its simplest form, `pipepy.cd` is an alias to `os.chdir`:
+
+```python
+from pipepy import cd, pwd
+
+print(pwd())
+# <<< /foo
+
+cd('bar')
+print(pwd())
+# <<< /foo/bar
+
+cd('..')
+print(pwd())
+# <<< /foo
+```
+
+But it can be used as a context processor for temporary directory changes:
+
+```python
+print(pwd())
+# <<< /foo
+
+with cd("bar"):
+    print(pwd())
+# <<< /foo/bar
+
+print(pwd())
+# <<< /foo
+```
+
+### export
+
+In its simplest form, `pipepy.export` is an alias to `os.environ.update`:
+
+```python
+import os
+from pipepy import export
+
+print(os.environ['HOME'])
+# <<< /home/foo
+
+export(PATH="/home/foo/bar")
+print(os.environ['HOME'])
+# <<< /home/foo/bar
+```
+
+But it can be used as a context processor for temporary environment changes:
+
+```python
+print(os.environ['HOME'])
+# <<< /home/foo
+
+with export(PATH="/home/foo/bar"):
+    print(os.environ['HOME'])
+# <<< /home/foo/bar
+
+print(os.environ['HOME'])
+# <<< /home/foo
+```
+
+If an environment variable is further modified within the body of the `with`
+block, it is not reverted upon exit:
+
+```python
+with export(PATH="/home/foo/bar"):
+    export(PATH="/home/foo/BAR")
+
+print(os.environ['HOME'])
+# <<< /home/foo/BAR
+```
 
 ## "Interactive" mode
 
@@ -1026,3 +1095,4 @@ ways:
 - [x] Add more docstrings
 - [x] Stream and capture `stdout` and `stderr` at the same time
 - [ ] Python virtual environments (maybe sourcing bash files will suffice)
+- [ ] `jobs` implementation
