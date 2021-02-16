@@ -1094,9 +1094,30 @@ ways:
    # ← hello Bill
    ```
 
+### Shell completion for `pymake`
+
+If you want to enable shell completion for `pymake` targets you should run:
+
+```sh
+complete -C _pymake_complete pymake
+```
+
+in bash or 
+
+```sh
+complete -F _pymake_complete pymake
+```
+
+in zsh.
+
+_(`_pymake_complete` is an executable installed with `pipepy` for this
+purpose)_
+
+
 ## TODOs
 
 - [x] Context processors for `cd` and/or environment
 - [x] `jobs` implementation
 - [ ] Ability to source bash files
 - [ ] Python virtual environments (maybe sourcing bash files will suffice)
+- [x] Autocomplete for `pymake`

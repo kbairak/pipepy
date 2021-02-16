@@ -7,7 +7,7 @@ already_run = {}
 command_args = {}
 
 
-def pymake():
+def _load_makefile():
     global Makefile
 
     spec = importlib.util.spec_from_file_location('Makefile', './Makefile.py')
@@ -15,21 +15,27 @@ def pymake():
     sys.modules['Makefile'] = Makefile
     spec.loader.exec_module(Makefile)
 
-    has_args = len(sys.argv) > 1
-    first_arg_is_target = has_args and '=' not in sys.argv[1]
-    if first_arg_is_target:
-        target = sys.argv[1]
-    else:
-        target = Makefile.DEFAULT_PYMAKE_TARGET
 
-    start = 2 if first_arg_is_target else 1
-    rest = sys.argv[start:]
+def pymake():
+    _pymake(*sys.argv[1:])
 
-    for item in rest:
-        key, value = item.split('=')
-        command_args[key] = value
 
-    _run(target)
+def _pymake(*args):
+    _load_makefile()
+
+    targets = []
+    for arg in args:
+        if '=' in arg:
+            key, value = arg.split('=')
+            command_args[key] = value
+        else:
+            targets.append(arg)
+
+    if not targets:
+        targets = [Makefile.DEFAULT_PYMAKE_TARGET]
+
+    for target in targets:
+        _run(target)
 
 
 def _run(target):
@@ -54,3 +60,9 @@ def _run(target):
             args.append(value)
 
     return function(*args)
+
+
+def pymake_complete():
+    _load_makefile()
+    word = sys.argv[-2]
+    print(" ".join((attr for attr in dir(Makefile) if attr.startswith(word))))

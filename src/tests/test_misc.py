@@ -40,6 +40,10 @@ def test_export():
         assert os.environ['PATH'] == original_path + ":FOO"
     assert os.environ['PATH'] == original_path + ":FOO"
 
+    with export(DUMMY_ENV_VAR_____="FOO"):
+        assert os.environ['DUMMY_ENV_VAR_____'] == "FOO"
+    assert 'DUMMY_ENV_VAR_____' not in os.environ
+
     os.environ['PATH'] = original_path
 
 
