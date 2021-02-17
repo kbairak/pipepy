@@ -1,6 +1,8 @@
 import os
 
-from pipepy import cd, export, jobs, sleep, wait_jobs
+import pytest
+
+from pipepy import PipePyError, cd, export, jobs, sleep, source, wait_jobs
 
 
 def pwd():
@@ -61,3 +63,49 @@ def test_jobs():
 
     wait_jobs()
     assert len(jobs()) == 0
+
+
+def test_source():
+    # Simple
+    with cd('src/tests/playground'):
+        with source('env'):
+            assert os.environ['FOO___'] == "foo"
+            assert 'BAR___' not in os.environ
+        assert 'FOO___' not in os.environ
+
+        source('env')
+        assert os.environ['FOO___'] == "foo"
+        assert 'BAR___' not in os.environ
+        del os.environ['FOO___']
+        assert 'FOO___' not in os.environ
+
+    # Recursive
+    with cd('src/tests/playground/envdir'):
+        with source('env', recursive=True):
+            assert os.environ['FOO___'] == "foo"
+            assert os.environ['BAR___'] == "bar"
+        assert 'FOO___' not in os.environ
+        assert 'BAR___' not in os.environ
+
+        source('env', recursive=True)
+        assert os.environ['FOO___'] == "foo"
+        assert os.environ['BAR___'] == "bar"
+        del os.environ['FOO___']
+        assert 'FOO___' not in os.environ
+        del os.environ['BAR___']
+        assert 'BAR___' not in os.environ
+
+    # Bad file
+    with cd('src/tests/playground'):
+        prev = dict(os.environ)
+        source('bad_env')
+        assert prev == dict(os.environ)
+
+        with pytest.raises(PipePyError):
+            source('bad_env', quiet=False)
+
+    # Preserves further edits
+    with cd('src/tests/playground'):
+        with source('env'):
+            export(FOO___="FOO")
+        assert os.environ['FOO___'] == "FOO"

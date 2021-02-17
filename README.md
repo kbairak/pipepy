@@ -1,6 +1,6 @@
 A Python library for invoking and interacting with shell commands.
 
-![Build](https://github.com/kbairak/pipepy/workflows/Test%20suite/badge.svg)
+[![Build](https://github.com/kbairak/pipepy/workflows/Test%20suite/badge.svg)](https://github.com/kbairak/pipepy/actions)
 
 ## Table of contents
 
@@ -16,10 +16,9 @@ A Python library for invoking and interacting with shell commands.
 * [Interacting with background processes](#interacting-with-background-processes)
 * [Altering the behavior of commands](#altering-the-behavior-of-commands)
 * [Miscellaneous](#miscellaneous)
-* ["Interactive" mode](#interactive-mode)
 * [pymake](#pymake)
 
-<!-- Added by: kbairak, at: Tue Feb 16 09:37:02 PM EET 2021 -->
+<!-- Added by: kbairak, at: Thu Feb 18 12:50:26 AM EET 2021 -->
 
 <!--te-->
 
@@ -870,9 +869,9 @@ to the underlying
 object.
 
 Here are some utilities implemented within `pipepy` that don't make use of
-shell subprocesses, but we believe are useful for bash scripting.
+shell subprocesses, but we believe are useful for scripting.
 
-### cd
+### `cd`
 
 In its simplest form, `pipepy.cd` is an alias to `os.chdir`:
 
@@ -905,7 +904,7 @@ print(pwd())
 # <<< /foo
 ```
 
-### export
+### `export`
 
 In its simplest form, `pipepy.export` is an alias to `os.environ.update`:
 
@@ -947,7 +946,74 @@ print(os.environ['HOME'])
 # <<< /home/foo/BAR
 ```
 
-## "Interactive" mode
+### `source`
+
+The `source` function runs a bash script, extracts the resulting environment
+variables that have been set in the script and saves them on the current
+environment. Similarly to `export`, it can be used as a context processor (in
+fact, it uses `export` internally):
+
+```bash
+# env
+export AAA=aaa
+```
+
+```python
+import os
+from pipepy import source
+
+with source('env'):
+    print(os.environ['AAA'])
+# <<< aaa
+'AAA' in os.environ
+# <<< False
+
+source('env')
+print(os.environ['AAA'])
+# <<< aaa
+```
+
+The following keyword-only arguments are available to `source`:
+
+- **recursive** (boolean, defaults to `False`): If set, all files with the same
+  name in the current directory and all its parents will be sourced, in reverse
+  order. This allows nesting of environment variables:
+
+  ```
+  - /
+    |
+    + - home/
+        |
+        - kbairak/
+          |
+          + - env:
+          |     export COMPOSE_PROJECT_NAME="pipepy"
+          |
+          + - project/
+              |
+              + - env:
+                    export COMPOSE_FILE="docker-compose.yml:docker-compose-dev.yml"
+  ```
+
+  ```python
+  from pipepy import cd, source, docker_compose
+  cd('/home/kbairak/project')
+  source('env', recursive=True)
+  # Now I have both `COMPOSE_PROJECT_NAME` and `COMPOSE_FILE`
+  ```
+
+  The files `/home/kbairak/env` and `/home/kbairak/project/env` were sourced,
+  in that order.
+
+- **quiet** (boolean, defaults to `True`): If the sourced file fails, `source`
+  will usually skip its sourcing without complaint and move on to the next one
+  (if `recursive` is set). With `quiet=False`, an exception will be raised and
+  the environment will not be updated.
+
+- **shell** (string, defaults to `'bash'`): The shell command used to perform
+  the sourcing.
+
+### "Interactive" mode
 
 When "interactive" mode is set, the `__repr__` method will simply return
 `self.stdout + self.stderr`. This enables some very basic functionality for the
@@ -1120,8 +1186,7 @@ purpose)_
 
 ## TODOs
 
-- [x] Context processors for `cd` and/or environment
-- [x] `jobs` implementation
-- [ ] Ability to source bash files
+- [x] Ability to source bash files
+- [ ] Better autocompletion for zsh, show target docstrings
+- [ ] Pipe to generator
 - [ ] Python virtual environments (maybe sourcing bash files will suffice)
-- [x] Autocomplete for `pymake`

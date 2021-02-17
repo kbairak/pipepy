@@ -65,4 +65,4 @@ def _run(target):
 def pymake_complete():
     _load_makefile()
     word = sys.argv[-2]
-    print(" ".join((attr for attr in dir(Makefile) if attr.startswith(word))))
+    print("\n".join((attr for attr in dir(Makefile) if attr.startswith(word))))
