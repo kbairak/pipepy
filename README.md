@@ -1166,27 +1166,52 @@ ways:
 
 ### Shell completion for `pymake`
 
-If you want to enable shell completion for `pymake` targets you should run:
+`pymake` supports shell completion for bash and zsh.
+
+In bash, run:
 
 ```sh
-complete -C _pymake_complete pymake
+eval $(pymake --setup-bash-completion)
 ```
 
-in bash or 
+Then you will be able to see things like (example taken from `pipepy`'s
+Makefile):
+
+```
+[kbairak@kbairakdelllaptop pipepy]$ pymake <TAB><TAB>
+build      clean      debugtest  publish    watchtest
+checks     covtest    html       test
+```
+
+In zsh, run:
 
 ```sh
-complete -F _pymake_complete pymake
+eval $(pymake --setup-zsh-completion)
 ```
 
-in zsh.
+Then you will be able to see things like (example taken from `pipepy`'s
+Makefile):
 
-_(`_pymake_complete` is an executable installed with `pipepy` for this
-purpose)_
+```
+(pipepy) ➜  pipepy git:(master) ✗ pymake <TAB>
+build      -- Build package
+checks     -- Run static checks on the code (flake8, isort)
+clean      -- Clean up build directories
+covtest    -- Run tests and produce coverge report
+debugtest  -- Run tests without capturing their output. This makes using an interactive debugger possible
+html       -- Run tests and open coverage report in browser
+publish    -- Publish pacage to PyPI
+test       -- Run tests
+watchtest  -- Automatically run tests when a source file changes
+```
+
+The descriptions are taken from the `pymake` targets' docstrings.
+
+You can put the `eval` statements in your `.bashrc`/`.zshrc`.
 
 
 ## TODOs
 
-- [x] Ability to source bash files
-- [ ] Better autocompletion for zsh, show target docstrings
+- [x] Better autocompletion for zsh, show target docstrings
 - [ ] Pipe to generator
 - [ ] Python virtual environments (maybe sourcing bash files will suffice)
