@@ -41,7 +41,7 @@ def set_interactive(value):
 
 class PipePy:
     # Init and copies
-    def __init__(self, *args, _lazy=False, _left=None, _stream_stdout=None,
+    def __init__(self, *args, _lazy=False, _input=None, _stream_stdout=None,
                  _stream_stderr=None, _stream=None, _text=True,
                  _encoding="UTF-8", _raise=None, **kwargs):
         """ Initialize a PipePy object.
@@ -86,9 +86,9 @@ class PipePy:
                 from `__call__` or other helper functions will have this set to
                 True
 
-            - _left: Where the command's input comes from. Will be populated by
-                pipe operations `"foo\nbar\n" | grep("foo")` will be equivalent
-                to`grep("foo", _left="foo\nbar\n")`)
+            - _input: Where the command's input comes from. Will be populated
+                  by pipe operations `"foo\nbar\n" | grep("foo")` will be
+                  equivalent to`grep("foo", _input="foo\nbar\n")`)
 
             - _stream: Whether the output streams will be captured or passed on
                 to the relevant streams of the underlying Python process. Will
@@ -97,7 +97,7 @@ class PipePy:
 
         self._args = self._convert_args(args, kwargs)
         self._lazy = _lazy
-        self._left = _left
+        self._input = _input
         self._stream_stdout = _stream_stdout
         self._stream_stderr = _stream_stderr
         self._stream = _stream
@@ -106,13 +106,13 @@ class PipePy:
         self._raise = _raise
 
         self._process = None
-        self._input_fed = False
+        self._input_consumed = False
 
         self._returncode = None
         self._stdout = None
         self._stderr = None
 
-    def __call__(self, *args, _left=None, _stream_stdout=None,
+    def __call__(self, *args, _input=None, _stream_stdout=None,
                  _stream_stderr=None, _stream=None, _text=None, _encoding=None,
                  _raise=None, **kwargs):
         """ Make and return a copy of `self`, overriding some of its
@@ -127,7 +127,7 @@ class PipePy:
         """
 
         force = (not args and
-                 _left is None and
+                 _input is None and
                  _stream_stdout is None and
                  _stream_stderr is None and
                  _stream is None and
@@ -137,8 +137,8 @@ class PipePy:
                  not kwargs)
 
         args = self._args + list(args)
-        if _left is None:
-            _left = self._left
+        if _input is None:
+            _input = self._input
         if _stream_stdout is None:
             _stream_stdout = self._stream_stdout
         if _stream_stderr is None:
@@ -152,11 +152,11 @@ class PipePy:
         if _raise is None:
             _raise = self._raise
 
-        result = PipePy(*args, _lazy=True, _left=_left,
-                        _stream_stdout=_stream_stdout,
-                        _stream_stderr=_stream_stderr, _stream=_stream,
-                        _text=_text, _encoding=_encoding,
-                        _raise=_raise, **kwargs)
+        result = self.__class__(*args, _lazy=True, _input=_input,
+                                _stream_stdout=_stream_stdout,
+                                _stream_stderr=_stream_stderr, _stream=_stream,
+                                _text=_text, _encoding=_encoding,
+                                _raise=_raise, **kwargs)
         if force:
             result._evaluate()
         return result
@@ -192,13 +192,20 @@ class PipePy:
                 >>> git('status')
         """
 
-        return self.__class__(*(self._args + [attr]), _lazy=False)
+        return self.__class__(*(self._args + [attr]), _lazy=self._lazy,
+                              _input=copy(self._input),
+                              _stream_stdout=self._stream_stdout,
+                              _stream_stderr=self._stream_stderr,
+                              _stream=self._stream, _text=self._text,
+                              _encoding=self._encoding, _raise=self._raise)
 
     def __copy__(self):
-        return PipePy(*self._args, _lazy=True, _left=copy(self._left),
-                      _stream_stdout=self._stream_stdout,
-                      _stream_stderr=self._stderr, _stream=self._stream,
-                      _text=self._text, _encoding=self._encoding)
+        return self.__class__(*self._args, _lazy=True,
+                              _input=copy(self._input),
+                              _stream_stdout=self._stream_stdout,
+                              _stream_stderr=self._stderr,
+                              _stream=self._stream, _text=self._text,
+                              _encoding=self._encoding)
 
     @staticmethod
     def _convert_args(args, kwargs):
@@ -288,15 +295,15 @@ class PipePy:
         if self._process is not None and self._lazy:
             return
 
-        if isinstance(self._left, PipePy):
-            if self._left._returncode is not None:
+        if isinstance(self._input, PipePy):
+            if self._input._returncode is not None:
                 stdin = PIPE
             else:
-                self._left._start_background_job(stdin_to_pipe=stdin_to_pipe)
-                stdin = self._left._process.stdout
-        elif (is_iterable(self._left) or
+                self._input._start_background_job(stdin_to_pipe=stdin_to_pipe)
+                stdin = self._input._process.stdout
+        elif (is_iterable(self._input) or
               stdin_to_pipe or
-              isinstance(self._left, _File)):
+              isinstance(self._input, _File)):
             stdin = PIPE
         else:
             stdin = None
@@ -322,14 +329,14 @@ class PipePy:
 
     def _feed_input(self):
         """ If the command has been configured to receive special input via its
-            `_left` parameter, ie via pipes or input redirects, the input will
+            `_input` parameter, ie via pipes or input redirects, the input will
             be passed to the command during this step.
         """
 
-        if self._input_fed and self._lazy:
+        if self._input_consumed and self._lazy:
             return
 
-        left = self._left
+        left = self._input
         if isinstance(left, PipePy):
             if left._returncode is not None:
                 chunk = left.stdout
@@ -375,7 +382,7 @@ class PipePy:
                 self._process.stdin.flush()
             self._process.stdin.close()
 
-        self._input_fed = True
+        self._input_consumed = True
 
     # Control lifetime
     def delay(self):
@@ -433,8 +440,8 @@ class PipePy:
         self._returncode = self._process.wait()
 
         job = self
-        while isinstance(job._left, PipePy):
-            job = job._left
+        while isinstance(job._input, PipePy):
+            job = job._input
             job.wait()
 
         raise_exception = self._raise
@@ -574,10 +581,10 @@ class PipePy:
             return self._normal_repr()
 
     def _normal_repr(self):
-        result = ["PipePy("]
+        result = [self.__class__.__name__, "("]
         result.append(', '.join((repr(arg) for arg in self._args)))
-        if self._left is not None:
-            result.append(f", _left={self._left!r}")
+        if self._input is not None:
+            result.append(f", _input={self._input!r}")
         if self._returncode is not None:
             result.append(f", _returncode={self._returncode}")
         if self._stdout:
@@ -628,14 +635,16 @@ class PipePy:
                 >>> ps >> 'progs/txt'
         """
 
-        return self(_left=_File(filename))
+        return self(_input=_File(filename))
 
     # Pipes
-    def __or__(left, right):
-        return PipePy._pipe(left, right)
+    @classmethod
+    def __or__(cls, left, right):
+        return cls._pipe(left, right)
 
-    def __ror__(right, left):
-        return PipePy._pipe(left, right)
+    @classmethod
+    def __ror__(cls, right, left):
+        return cls._pipe(left, right)
 
     @staticmethod
     def _pipe(left, right):
@@ -684,10 +693,10 @@ class PipePy:
         error = TypeError(f"Cannot perform '|' operation on {left!r} and "
                           f"{right!r}, unsupported operands")
         if isinstance(left, PipePy) and isinstance(right, PipePy):
-            return right(_left=left)
+            return right(_input=left)
         elif isinstance(right, PipePy):
             if is_iterable(left):
-                return right(_left=left)
+                return right(_input=left)
             else:
                 raise error
         elif isinstance(left, PipePy):
@@ -758,21 +767,21 @@ class PipePy:
         self._start_background_job(stdin_to_pipe=True)
 
         job = self
-        while isinstance(job._left, PipePy):
-            job = job._left
+        while isinstance(job._input, PipePy):
+            job = job._input
 
         return job._process.stdin, self._process.stdout, self._process.stderr
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         job = self
-        while isinstance(job._left, PipePy):
-            job = job._left
+        while isinstance(job._input, PipePy):
+            job = job._input
         job._process.stdin.close()
 
         self.wait()
         job = self
-        while isinstance(job._left, PipePy):
-            job = job._left
+        while isinstance(job._input, PipePy):
+            job = job._input
             job.wait()
 
     # Forward calls to background process

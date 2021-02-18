@@ -350,7 +350,9 @@ The `|` operator is used to customize where a command gets its input from and
 what it does with its output. Depending on the types of the operands, different
 behaviors will emerge:
 
-### 1. Both operands are commands
+### 1. Right operand is a `PipePy` instance
+
+#### 1a. Both operands are `PipePy` instances
 
 If both operands are commands, the result will be as similar as possible to
 what would have happened in a shell:
@@ -365,7 +367,7 @@ If the left operand was previously evaluated, then it's output (`stdout`) will
 be passed directly as input to the right operand. Otherwise, both commands will
 be executed in parallel and `left`'s output will be streamed into `right`.
 
-### 2. Left operand is any kind of iterable (including string)
+#### 1b. Left operand is any kind of iterable (including string)
 
 If the left operand is any kind of iterable, its elements will be fed to the
 command's stdin one by one:
@@ -439,7 +441,19 @@ command.stdout
 # <<< ''
 ```
 
-### 3. Right operand is a function
+Also, if you prefer an invocation style that resembles a function call more
+than a shell pipe operation, ie if you want to pass a command's input as an
+argument, you can use the `_input` keyword argument:
+
+```python
+grep('foo', _input="foo\nbar\n")
+# Is equivalent to
+"foo\nbar\n" | grep('foo')
+```
+
+This works both for inputs that are iterables and commands.
+
+### 2. Right operand is a function
 
 The function's arguments need to either be:
 
@@ -569,7 +583,7 @@ console, courtesy of the `_stream_stdout` argument (more on this
 
 This can be done either by piping the output of a command to a function with a
 subset of `stdin`, `stdout` and `stderr` as its arguments, as we demonstrated
-[before](#3-right-operand-is-a-function), or by iterating over a command's
+[before](#2-right-operand-is-a-function), or by iterating over a command's
 output:
 
 ```python
@@ -862,6 +876,80 @@ except Exception as exc:
     print(exc)
 ```
 
+### "Interactive" mode
+
+When "interactive" mode is set, the `__repr__` method will simply return
+`self.stdout + self.stderr`. This enables some very basic functionality for the
+interactive python shell. To set interactive mode, run
+`pipepy.set_interactive(True)`:
+
+```python
+import pipepy
+from pipepy import ls, overload_chars
+pipepy.set_interactive(True)
+ls
+# <<< demo.py
+# ... interactive2.py
+# ... interactive.py
+# ... main.py
+
+overload_chars(locals())
+ls -l
+# <<< total 20
+# ... -rw-r--r-- 1 kbairak kbairak  159 Feb  7 22:05 demo.py
+# ... -rw-r--r-- 1 kbairak kbairak  275 Feb  7 22:04 interactive2.py
+# ... -rw-r--r-- 1 kbairak kbairak  293 Feb  7 22:04 interactive.py
+# ... -rw-r--r-- 1 kbairak kbairak 4761 Feb  8 20:42 main.py
+```
+
+### Making alterations "permanent"
+
+Since `PipePy` objects treat their list of arguments as list of strings simply
+passed onto the `subprocess.Popen` function, and since there is no special
+significance to the first argument even though it is technically the command
+being executed, you can crete `PipePy` instances with the alterations we
+discussed and use them as templates for commands that will inherit these
+alterations:
+
+```python
+stream_sh = PipePy(_stream=True)
+stream_sh
+# <<< PipePy()
+stream_sh._stream
+# <<< True
+
+stream_sh.ls
+# <<< PipePy('ls')
+stream_sh.ls._stream
+# <<< True
+
+r = stream_sh.ls()
+# <<< check_tag.py  Makefile.py     setup.cfg  tags
+# ... htmlcov       pyproject.toml  setup.py   test_requirements.txt
+# ... LICENSE       README.md       src
+
+r.stdout
+# <<< None
+
+r.returncode
+# <<< 0
+```
+
+```python
+raise_sh = PipePy(_raise=True)
+raise_sh
+# <<< PipePy()
+raise_sh.false
+# <<< PipePy('false')
+raise_sh.false()
+# <<< Traceback (most recent call last):
+# ... ...
+# ... pipepy.exceptions.PipePyError: (1, '', '')
+```
+
+This can work as a more contained alternative to `set_always_stream` and
+`set_always_raise`.
+
 ## Miscellaneous
 
 `.terminate()`, `.kill()` and `.send_signal()` simply forward the method call
@@ -1013,32 +1101,6 @@ The following keyword-only arguments are available to `source`:
 
 - **shell** (string, defaults to `'bash'`): The shell command used to perform
   the sourcing.
-
-### "Interactive" mode
-
-When "interactive" mode is set, the `__repr__` method will simply return
-`self.stdout + self.stderr`. This enables some very basic functionality for the
-interactive python shell. To set interactive mode, run
-`pipepy.set_interactive(True)`:
-
-```python
-import pipepy
-from pipepy import ls, overload_chars
-pipepy.set_interactive(True)
-ls
-# <<< demo.py
-# ... interactive2.py
-# ... interactive.py
-# ... main.py
-
-overload_chars(locals())
-ls -l
-# <<< total 20
-# ... -rw-r--r-- 1 kbairak kbairak  159 Feb  7 22:05 demo.py
-# ... -rw-r--r-- 1 kbairak kbairak  275 Feb  7 22:04 interactive2.py
-# ... -rw-r--r-- 1 kbairak kbairak  293 Feb  7 22:04 interactive.py
-# ... -rw-r--r-- 1 kbairak kbairak 4761 Feb  8 20:42 main.py
-```
 
 ## pymake
 
@@ -1213,6 +1275,14 @@ You can put the `eval` statements in your `.bashrc`/`.zshrc`.
 
 ## TODOs
 
-- [x] Better autocompletion for zsh, show target docstrings
 - [ ] Pipe to generator
-- [ ] Python virtual environments (maybe sourcing bash files will suffice)
+- [ ] Stream and capture at the same time (wrapper class for file-like object?)
+- [ ] Timeout for wait
+- [ ] Redirect input/output from/to file-like objects
+- [ ] `with` blocks where PipePy invocations forward to the context's stdin, eg:
+
+  ```python
+  from pipepy import ssh
+  with ssh("some-host") as host:
+      r = host.ls()  # Will actually send 'ls\n' to ssh's stdin
+  ```
