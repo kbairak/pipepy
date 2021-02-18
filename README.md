@@ -417,7 +417,7 @@ for line in command:  # Here we wait for the command to finish
     # ...
 ```
 
-It also means that the left operand, if it's an iterable will be consumed when
+It also means that the left operand, if it's an iterable, will be consumed when
 the command is evaluated.
 
 ```python

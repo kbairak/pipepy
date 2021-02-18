@@ -34,4 +34,4 @@ def test_pymake_default_target():
 def test_pymake_dependencies():
     with cd('src/tests/playground'):
         assert str(pymake.echo4('msg1=Bill')) == "hello Bill\nhello world\n"
-        pymake('echo4', "msg1=Bill")
+        _pymake('echo4', "msg1=Bill")

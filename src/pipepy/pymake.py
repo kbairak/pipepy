@@ -21,7 +21,7 @@ def _load_makefile():
 
 
 def pymake():
-    _pymake(*sys.argv[1:])
+    _pymake(*sys.argv[1:])  # Separating for tests
 
 
 def _pymake(*args):
@@ -46,8 +46,6 @@ def _pymake(*args):
 
 
 def _run(target):
-    global already_run
-
     function = getattr(Makefile, target)
     parameters = inspect.signature(function).parameters
     args = []
@@ -72,7 +70,7 @@ def _run(target):
 def _pymake_complete(*args):
     """ Setup completion for shells.
 
-        The first argument must is `--setup-FOO-completion` or `--complete-FOO`
+        The first argument must be `--setup-FOO-completion` or `--complete-FOO`
         where FOO is the shell being completed (bash or zsh).
 
         In order to setup comletion for the respective shell, you must run
@@ -125,8 +123,12 @@ def _pymake_complete(*args):
                     getattr(func, '__module__', '') != "Makefile"):
                 continue
             if func.__doc__:
-                doc = " ".join([line.strip()
-                                for line in func.__doc__.splitlines()])
+                doc = func.__doc__
+                doc = doc.\
+                    replace("'", "\\'").\
+                    replace(':', '\\:').\
+                    replace('\\', '\\\\')
+                doc = " ".join([line.strip() for line in doc.splitlines()])
                 result += f" '{attr}:{doc}'"
             else:
                 result += f" '{attr}'"
