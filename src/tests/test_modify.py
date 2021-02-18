@@ -21,6 +21,7 @@ def test_kwargs():
     assert PipePy(key_key="value")._args == ["--key-key=value"]
     assert PipePy(key=True)._args == ["--key"]
     assert PipePy(key=False)._args == ["--no-key"]
+    assert PipePy(k="value")._args == ["-k", "value"]
 
 
 def test_kwargs_first():

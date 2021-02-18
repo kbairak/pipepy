@@ -209,6 +209,10 @@ class PipePy:
                 >>> # Equivalent to
                 >>> PipePy('sleep', '10')
 
+                >>> PipePy('ls', I='foo')
+                >>> # Equivalent to
+                >>> PipePy('ls', '-I', 'foo')
+
                 >>> PipePy('ls', sort="size")
                 >>> # Equivalent to
                 >>> PipePy('ls', '--sort=size')
@@ -243,6 +247,8 @@ class PipePy:
                 final_args.append(f"--{key}")
             elif value is False:
                 final_args.append(f"--no-{key}")
+            elif len(key) == 1:
+                final_args.extend([f"-{key}", value])
             else:
                 final_args.append(f"--{key}={value}")
         return final_args

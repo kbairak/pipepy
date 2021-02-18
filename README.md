@@ -144,6 +144,7 @@ There is a number of other ways you can customize a command:
   ```python
   from pipepy import ls
   ls(sort="size")     # Equivalent to ls('--sort=size')
+  ls(I="files.txt")   # Equivalent to ls('-I', 'files.txt')
   ls(sort_by="size")  # Equivalent to ls('--sort-by=size')
   ls(escape=True)     # Equivalent to ls('--escape')
   ls(escape=False)    # Equivalent to ls('--no-escape')
