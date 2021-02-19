@@ -638,13 +638,11 @@ class PipePy:
         return self(_input=_File(filename))
 
     # Pipes
-    @classmethod
-    def __or__(cls, left, right):
-        return cls._pipe(left, right)
+    def __or__(left, right):
+        return PipePy._pipe(left, right)
 
-    @classmethod
-    def __ror__(cls, right, left):
-        return cls._pipe(left, right)
+    def __ror__(right, left):
+        return PipePy._pipe(left, right)
 
     @staticmethod
     def _pipe(left, right):
