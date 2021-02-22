@@ -686,6 +686,21 @@ class PipePy:
                The ordering of the arguments doesn't matter since the
                function's signature will be inspected to determine the
                appropriate behavior
+
+            4. If only the the left operand is a PipePy object and the right
+               object is a generator (the return value of a function that
+               `yield`s), then the generator will receive non-empty lines from
+               the command's output and the return value of the pipe operation
+               will be another generator that will yield whatever the original
+               generator yielded
+
+                >>> def my_generator():
+                ...     line = yield
+                ...     while True:
+                ...         line = (yield line.upper())
+
+                >>> list("aaa\nbbb" | cat | my_generator())
+                <<< ["AAA", "BBB"]
         """
 
         error = TypeError(f"Cannot perform '|' operation on {left!r} and "
@@ -700,6 +715,8 @@ class PipePy:
         elif isinstance(left, PipePy):
             if callable(right):
                 return left._send_output_to_function(right)
+            elif isinstance(right, types.GeneratorType):
+                return left._send_output_to_generator(right)
             else:
                 raise error
         else:
@@ -707,7 +724,7 @@ class PipePy:
 
     # Help with pipes
     def _send_output_to_function(self, func):
-        """ Implement the "pipe to function" functionality.  """
+        """ Implement the "pipe to function" functionality """
 
         error = TypeError(f"Cannot pipe to {func!r}: "
                           "Invalid function signature")
@@ -747,6 +764,30 @@ class PipePy:
                 return result
         else:
             raise error
+
+    def _send_output_to_generator(self, generator):
+        """ Implement the "pipe to generator" functionality """
+
+        def result():
+            self._start_background_job()
+            self._feed_input()
+            stdout = (line.strip() + "\n"
+                      for line in self._process.stdout
+                      if line.strip())
+            try:
+                next_input = next(generator)
+            except StopIteration:
+                generator.close()
+                return
+            while True:
+                if next_input is not None:
+                    yield next_input
+                try:
+                    next_input = generator.send(next(stdout))
+                except StopIteration:
+                    break
+            generator.close()
+        return result()
 
     # `with` statements
     def __enter__(self):

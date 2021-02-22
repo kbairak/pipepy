@@ -453,7 +453,9 @@ grep('foo', _input="foo\nbar\n")
 
 This works both for inputs that are iterables and commands.
 
-### 2. Right operand is a function
+### 2. Only left operand is a `PipePy` instance
+
+#### 2a. Right operand is a function
 
 The function's arguments need to either be:
 
@@ -540,6 +542,38 @@ print(my_input() | cat | grep('line') | my_output | grep("TWO"))
 # ... LINE TWO
 ```
 
+#### 2b. Right operand is a generator
+
+This is one of the more exotic forms of piping. Here we take advantage of
+Python's
+[passing values into a generator](https://docs.python.org/3/howto/functional.html?highlight=sending%20generator#passing-values-into-a-generator)
+functionality. The original generator must send and receive data with the
+`a = (yield b)` syntax. The result of the pipe operation will be another
+generator that will yield whatever the original generator yields while, in the
+original generator, the return value of each `yield` command will be the next
+non-empty line of the `PipePy` instance:
+
+```python
+from pipepy import echo
+
+def upperize():
+    line = yield
+    while True:
+        line = (yield line.upper())
+
+# Remember, `upperize` is a function, `upperize()` is a generator
+list(echo("aaa\nbbb") | upperize())
+# <<< ["AAA\n", "BBB\n"]
+```
+
+And, since the return value of the pipe operation is a generator, it can be
+piped into another command:
+
+```python
+print(echo("aaa\nbbb") | upperize() | grep("AAA"))
+# <<< AAA
+```
+
 ## Interacting with background processes
 
 There are 3 ways to interact with a background process: _read-only_,
@@ -582,9 +616,9 @@ console, courtesy of the `_stream_stdout` argument (more on this
 ### 2. Incrementally reading data from a command
 
 This can be done either by piping the output of a command to a function with a
-subset of `stdin`, `stdout` and `stderr` as its arguments, as we demonstrated
-[before](#2-right-operand-is-a-function), or by iterating over a command's
-output:
+subset of `stdin`, `stdout` and `stderr` as its arguments, or a generator, as
+we demonstrated [before](#2a-right-operand-is-a-function), or by iterating over
+a command's output:
 
 ```python
 import time
@@ -1275,7 +1309,7 @@ You can put the `eval` statements in your `.bashrc`/`.zshrc`.
 
 ## TODOs
 
-- [ ] Pipe to generator
+- [x] Pipe to generator
 - [ ] Stream and capture at the same time (wrapper class for file-like object?)
 - [ ] Timeout for wait
 - [ ] Redirect input/output from/to file-like objects

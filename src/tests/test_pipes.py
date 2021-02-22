@@ -39,3 +39,14 @@ def test_long_pipe():
     assert (str(my_input() | cat | grep('line') | my_output | grep("TWO")).
             strip() ==
             "LINE TWO\nLINE TWO")
+
+
+def upperize():
+    line = yield
+    while True:
+        line = (yield line.upper())
+
+
+def test_pipe_to_generator():
+    assert list(echo("aaa\nbbb") | upperize()) == ["AAA\n", "BBB\n"]
+    assert str(echo("aaa\nbbb") | upperize() | grep("AAA")) == "AAA\n"
