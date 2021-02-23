@@ -328,11 +328,24 @@ download = wget('...').delay()
 download.wait()
 ```
 
+You can supply the optional `timeout` argument to `wait`. If the timeout is
+set, it expires and the process hasn't finished, a `TimeoutExpired` exception
+will be raised. (This is the same `TimeoutExpired` exception class from the
+`subprocess` module but you can import it from the `pipepy` module too)
+
+```python
+from pipepy import sleep
+command = sleep(100).delay()
+command.wait(5)
+# <<< TimeoutExpired: Command '['sleep', '30']' timed out after 5 seconds
+```
+
 At any point, you can call `pipepy.jobs()` to get a list of non-waited-for
 commands. In case you want to do some cleaning up, there is also a
 `pipepy.wait_jobs()` function. This should be used with care however as, if any
 of the background jobs aren't finished or are stuck, `wait_jobs()` may hang for
-an unknown amount of time.
+an unknown amount of time. `wait_jobs` also accepts the optional `timeout`
+argument.
 
 ## Redirecting output from/to files
 
@@ -342,6 +355,20 @@ The `>`, `>>` and `<` operators work similar to how they work in a shell:
 ls               >  'files.txt'  # Will overwrite files.txt
 ls               >> 'files.txt'  # Will append to files.txt
 grep('info.txt') <  'files.txt'  # Will use files.txt as input
+```
+
+These also work with file-like objects:
+
+```python
+import os
+from pipepy import ls, grep
+
+buf = io.StringIO()
+ls > buf
+ls('subfolder') >> buf
+
+buf.seek(0)
+grep('filename') < buf
 ```
 
 ## Pipes
@@ -1309,10 +1336,9 @@ You can put the `eval` statements in your `.bashrc`/`.zshrc`.
 
 ## TODOs
 
-- [x] Pipe to generator
+- [x] Timeout for wait
+- [x] Redirect input/output from/to file-like objects
 - [ ] Stream and capture at the same time (wrapper class for file-like object?)
-- [ ] Timeout for wait
-- [ ] Redirect input/output from/to file-like objects
 - [ ] `with` blocks where PipePy invocations forward to the context's stdin, eg:
 
   ```python

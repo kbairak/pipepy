@@ -1,6 +1,8 @@
 import time
 
-from pipepy import PipePy
+import pytest
+
+from pipepy import PipePy, TimeoutExpired, sleep
 
 echo_messages = PipePy('python', 'src/tests/playground/echo_messages.py')
 
@@ -29,3 +31,10 @@ def test_kill():
     command.kill()
     command.wait()
     assert len([line.strip() for line in str(command).splitlines()]) < 10
+
+
+def test_wait_timeout():
+    command = sleep(.3).delay()
+    with pytest.raises(TimeoutExpired):
+        command.wait(.01)
+    command.wait()

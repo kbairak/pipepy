@@ -1,9 +1,10 @@
 import inspect
+import io
 import reprlib
 import types
 from copy import copy
 from glob import glob
-from subprocess import PIPE, Popen
+from subprocess import PIPE, Popen, TimeoutExpired
 
 from .exceptions import PipePyError
 from .utils import _File, is_iterable
@@ -19,9 +20,9 @@ def jobs():
     return list(_JOBS.values())
 
 
-def wait_jobs():
+def wait_jobs(timeout=None):
     for command in jobs():
-        command.wait()
+        command.wait(timeout)
 
 
 def set_always_raise(value):
@@ -409,7 +410,7 @@ class PipePy:
         result._feed_input()
         return result
 
-    def wait(self):
+    def wait(self, timeout=None):
         """ Wait for a process to finish and store the result.
 
             This is called internally by pipe operations, but can also be
@@ -423,7 +424,11 @@ class PipePy:
         """
 
         try:
-            self._stdout, self._stderr = self._process.communicate()
+            self._stdout, self._stderr = self._process.\
+                communicate(timeout=timeout)
+            self._returncode = self._process.wait()
+        except TimeoutExpired:
+            raise
         except Exception:
             if self._process.stdout is not None:
                 self._stdout = self._process.stdout.read()
@@ -433,16 +438,16 @@ class PipePy:
                 self._stderr = self._process.stderr.read()
             else:
                 self._stderr = "" if self._text else b""
+            self._returncode = self._process.wait(timeout)
         try:
             del _JOBS[self._process.pid]
         except KeyError:
             pass
-        self._returncode = self._process.wait()
 
         job = self
         while isinstance(job._input, PipePy):
             job = job._input
-            job.wait()
+            job.wait(timeout)
 
         raise_exception = self._raise
         if raise_exception is None:
@@ -598,8 +603,8 @@ class PipePy:
         return self.stdout + self.stderr
 
     # Redirect output
-    def __gt__(self, filename):
-        """ Write output to file
+    def __gt__(left, right):
+        """ Write output to file or file-like object
 
             Usage:
 
@@ -607,35 +612,69 @@ class PipePy:
                 >>> ps > 'progs.txt'
         """
 
-        with open(filename,
-                  "w" if self._text else "wb",
-                  encoding=self._encoding) as f:
-            f.write(self.stdout)
+        if isinstance(right, str):
+            with open(right,
+                      "w" if left._text else "wb",
+                      encoding=left._encoding) as f:
+                if left._returncode is None:
+                    for line in left:
+                        f.write(line)
+                else:
+                    f.write(left.stdout)
+        elif isinstance(right, io.IOBase):
+            right.seek(0)
+            right.truncate()
+            if left._returncode is None:
+                for line in left:
+                    right.write(line)
+            else:
+                right.write(left.stdout)
+        else:
+            return NotImplemented
 
-    def __rshift__(self, filename):
-        """ Write output to file
+    def __rshift__(left, right):
+        """ Append output to file or file-like object
 
             Usage:
 
                 >>> ps = PipePy('ps')
-                >>> ps > 'progs.txt'
+                >>> ps >> 'progs.txt'
         """
 
-        with open(filename,
-                  "a" if self._text else "ab",
-                  encoding=self._encoding) as f:
-            f.write(self.stdout)
+        if isinstance(right, str):
+            with open(right,
+                      "a" if left._text else "ab",
+                      encoding=left._encoding) as f:
+                if left._returncode is None:
+                    for line in left:
+                        f.write(line)
+                else:
+                    f.write(left.stdout)
+        elif isinstance(right, io.IOBase):
+            right.read()  # Move pointer to end
+            if left._returncode is None:
+                for line in left:
+                    right.write(line)
+            else:
+                right.write(left.stdout)
+        else:
+            return NotImplemented
 
-    def __lt__(self, filename):
-        """ Append output to file
+    def __lt__(left, right):
+        """ Read input from file or file-like object
 
             Usage:
 
-                >>> ps = PipePy('ps')
-                >>> ps >> 'progs/txt'
+                >>> grep = PipePy('grep')
+                >>> grep('python') < 'progs/txt'
         """
 
-        return self(_input=_File(filename))
+        if isinstance(right, str):
+            return left(_input=_File(right))
+        elif isinstance(right, io.IOBase):
+            return left(_input=iter(right))
+        else:
+            return NotImplemented
 
     # Pipes
     def __or__(left, right):
@@ -703,24 +742,22 @@ class PipePy:
                 <<< ["AAA", "BBB"]
         """
 
-        error = TypeError(f"Cannot perform '|' operation on {left!r} and "
-                          f"{right!r}, unsupported operands")
         if isinstance(left, PipePy) and isinstance(right, PipePy):
             return right(_input=left)
         elif isinstance(right, PipePy):
             if is_iterable(left):
                 return right(_input=left)
             else:
-                raise error
+                return NotImplemented
         elif isinstance(left, PipePy):
             if callable(right):
                 return left._send_output_to_function(right)
             elif isinstance(right, types.GeneratorType):
                 return left._send_output_to_generator(right)
             else:
-                raise error
+                return NotImplemented
         else:
-            raise error
+            return NotImplemented
 
     # Help with pipes
     def _send_output_to_function(self, func):

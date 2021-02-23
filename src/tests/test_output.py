@@ -1,7 +1,8 @@
+import io
 import time
 
 import pipepy
-from pipepy import PipePy, cat, echo, false, ls, rm, true
+from pipepy import PipePy, cat, echo, false, grep, ls, rm, true
 
 echo_messages = PipePy('python', 'src/tests/playground/echo_messages.py')
 
@@ -65,6 +66,28 @@ def test_redirects():
     assert str(cat < filename).strip() == "hello world\nhello world"
 
     rm(filename)()
+
+    buf = io.StringIO("foo")
+    echo("hello world") > buf
+    buf.seek(0)
+    assert buf.read() == "hello world\n"
+
+    buf = io.BytesIO(b"foo")
+    echo("hello world", _text=False) > buf
+    buf.seek(0)
+    assert buf.read() == b"hello world\n"
+
+    buf = io.StringIO("foo ")
+    echo("hello world") >> buf
+    buf.seek(0)
+    assert buf.read() == "foo hello world\n"
+
+    buf = io.BytesIO(b"foo ")
+    echo("hello world", _text=False) >> buf
+    buf.seek(0)
+    assert buf.read() == b"foo hello world\n"
+
+    assert str(grep("aaa") < io.StringIO("aaa\nbbb")) == "aaa\n"
 
 
 def test_streams():
