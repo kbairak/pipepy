@@ -67,6 +67,6 @@ def build(clean):
 
 
 def publish(build):
-    """ Publish pacage to PyPI """
+    """ Publish package to PyPI """
 
     python('-m', "twine").upload("dist/*")()

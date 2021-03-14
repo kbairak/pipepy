@@ -5,6 +5,7 @@ A Python library for invoking and interacting with shell commands.
 ## Table of contents
 
 <!--ts-->
+* [Table of contents](#table-of-contents)
 * [Why? Comparison with other similar frameworks](#why-comparison-with-other-similar-frameworks)
 * [Installation and testing](#installation-and-testing)
 * [Intro, basic usage](#intro-basic-usage)
@@ -17,8 +18,9 @@ A Python library for invoking and interacting with shell commands.
 * [Altering the behavior of commands](#altering-the-behavior-of-commands)
 * [Miscellaneous](#miscellaneous)
 * [pymake](#pymake)
+* [TODOs](#todos)
 
-<!-- Added by: kbairak, at: Thu Feb 18 12:50:26 AM EET 2021 -->
+<!-- Added by: kbairak, at: Sun Mar 14 11:07:26 PM EET 2021 -->
 
 <!--te-->
 
@@ -187,8 +189,9 @@ There is a number of other ways you can customize a command:
   ascii letters to variables of the same name.
 
   ```python
-  from pipepy import ls, overload_chars
-  overload_chars(locals())
+  import pipepy
+  from pipepy import ls
+  pipepy.overload_chars(locals())
   ls -l -t  # Equivalent to ls('-l', '-t')
   ```
 
@@ -371,15 +374,24 @@ buf.seek(0)
 grep('filename') < buf
 ```
 
+If you want to combine input and output redirections, you have to put the first
+redirection inside parentheses because of how python likes to deal with
+comparison chains:
+
+```python
+from pipepy import gzip
+gzip = gzip(_text=False)
+gzip < 'uncompressed.txt' > 'uncompressed.txt.gz'    # Wrong!
+(gzip < 'uncompressed.txt') > 'uncompressed.txt.gz'  # Correct!
+```
+
 ## Pipes
 
 The `|` operator is used to customize where a command gets its input from and
 what it does with its output. Depending on the types of the operands, different
 behaviors will emerge:
 
-### 1. Right operand is a `PipePy` instance
-
-#### 1a. Both operands are `PipePy` instances
+### 1. Both operands are `PipePy` instances
 
 If both operands are commands, the result will be as similar as possible to
 what would have happened in a shell:
@@ -394,7 +406,7 @@ If the left operand was previously evaluated, then it's output (`stdout`) will
 be passed directly as input to the right operand. Otherwise, both commands will
 be executed in parallel and `left`'s output will be streamed into `right`.
 
-#### 1b. Left operand is any kind of iterable (including string)
+### 2. Left operand is any kind of iterable (including string)
 
 If the left operand is any kind of iterable, its elements will be fed to the
 command's stdin one by one:
@@ -480,9 +492,7 @@ grep('foo', _input="foo\nbar\n")
 
 This works both for inputs that are iterables and commands.
 
-### 2. Only left operand is a `PipePy` instance
-
-#### 2a. Right operand is a function
+### 3. Right operand is a function
 
 The function's arguments need to either be:
 
@@ -569,7 +579,7 @@ print(my_input() | cat | grep('line') | my_output | grep("TWO"))
 # ... LINE TWO
 ```
 
-#### 2b. Right operand is a generator
+### 4. Right operand is a generator
 
 This is one of the more exotic forms of piping. Here we take advantage of
 Python's
@@ -644,7 +654,7 @@ console, courtesy of the `_stream_stdout` argument (more on this
 
 This can be done either by piping the output of a command to a function with a
 subset of `stdin`, `stdout` and `stderr` as its arguments, or a generator, as
-we demonstrated [before](#2a-right-operand-is-a-function), or by iterating over
+we demonstrated [before](#3-right-operand-is-a-function), or by iterating over
 a command's output:
 
 ```python
@@ -1324,7 +1334,7 @@ clean      -- Clean up build directories
 covtest    -- Run tests and produce coverge report
 debugtest  -- Run tests without capturing their output. This makes using an interactive debugger possible
 html       -- Run tests and open coverage report in browser
-publish    -- Publish pacage to PyPI
+publish    -- Publish package to PyPI
 test       -- Run tests
 watchtest  -- Automatically run tests when a source file changes
 ```

@@ -360,7 +360,7 @@ class PipePy:
         elif isinstance(left, _File):
             with open(left.filename,
                       mode="r" if self._text else "rb",
-                      encoding=self._encoding) as f:
+                      encoding=self._encoding if self._text else None) as f:
                 for line in f:
                     self._process.stdin.write(line)
                     self._process.stdin.flush()
@@ -495,6 +495,8 @@ class PipePy:
 
         try:
             return self.stdout.decode(self._encoding)
+        except UnicodeDecodeError:
+            return str(self.stdout)
         except AttributeError:
             return self.stdout
 
@@ -615,7 +617,7 @@ class PipePy:
         if isinstance(right, str):
             with open(right,
                       "w" if left._text else "wb",
-                      encoding=left._encoding) as f:
+                      encoding=left._encoding if left._text else None) as f:
                 if left._returncode is None:
                     for line in left:
                         f.write(line)
@@ -644,7 +646,7 @@ class PipePy:
         if isinstance(right, str):
             with open(right,
                       "a" if left._text else "ab",
-                      encoding=left._encoding) as f:
+                      encoding=left._encoding if left._text else None) as f:
                 if left._returncode is None:
                     for line in left:
                         f.write(line)
