@@ -1,5 +1,6 @@
 import inspect
 import io
+import pathlib
 import reprlib
 import types
 from copy import copy
@@ -614,7 +615,7 @@ class PipePy:
                 >>> ps > 'progs.txt'
         """
 
-        if isinstance(right, str):
+        if isinstance(right, (pathlib.Path, str)):
             with open(right,
                       "w" if left._text else "wb",
                       encoding=left._encoding if left._text else None) as f:
@@ -643,7 +644,7 @@ class PipePy:
                 >>> ps >> 'progs.txt'
         """
 
-        if isinstance(right, str):
+        if isinstance(right, (pathlib.Path, str)):
             with open(right,
                       "a" if left._text else "ab",
                       encoding=left._encoding if left._text else None) as f:
@@ -671,7 +672,7 @@ class PipePy:
                 >>> grep('python') < 'progs/txt'
         """
 
-        if isinstance(right, str):
+        if isinstance(right, (pathlib.Path, str)):
             return left(_input=_File(right))
         elif isinstance(right, io.IOBase):
             return left(_input=iter(right))

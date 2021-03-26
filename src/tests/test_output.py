@@ -1,4 +1,5 @@
 import io
+import pathlib
 import time
 
 import pipepy
@@ -53,7 +54,7 @@ def test_iter():
         tic = time.time()
 
 
-def test_redirects():
+def test_redirects_filenames():
     filename = "src/tests/playground/output.txt"
     echo("hello world") > filename
     with open(filename) as f:
@@ -67,6 +68,23 @@ def test_redirects():
 
     rm(filename)()
 
+
+def test_redirects_pathlib():
+    filename = pathlib.Path("src/tests/playground/output.txt")
+    echo("hello world") > filename
+    with open(filename) as f:
+        assert f.read().strip() == "hello world"
+
+    echo("hello world") >> filename
+    with open(filename) as f:
+        assert f.read().strip() == "hello world\nhello world"
+
+    assert str(cat < filename).strip() == "hello world\nhello world"
+
+    rm(filename)()
+
+
+def test_redirects_buffers():
     buf = io.StringIO("foo")
     echo("hello world") > buf
     buf.seek(0)
