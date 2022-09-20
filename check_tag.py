@@ -9,7 +9,7 @@ if __name__ == "__main__":
     git_tag = str(git.describe(tags=True)).strip()
     print(f"git tag    is: {git_tag}")
 
-    python_tag = pkg_resources.require('pipepy')[0].version
+    python_tag = pkg_resources.require("pipepy")[0].version
     print(f"python tag is: {python_tag}")
 
     if git_tag == python_tag:

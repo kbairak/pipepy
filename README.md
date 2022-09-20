@@ -485,10 +485,26 @@ than a shell pipe operation, ie if you want to pass a command's input as an
 argument, you can use the `_input` keyword argument:
 
 ```python
-grep('foo', _input="foo\nbar\n")
+from pipepy import grep, ls
+
+grep('setup', _input=ls)
 # Is equivalent to
-"foo\nbar\n" | grep('foo')
+ls | grep('setup')
 ```
+
+or use the square-bracket notation:
+
+```python
+from pipepy import grep, ls
+
+grep('setup')[ls]
+# Is equivalent to
+ls | grep('setup')
+```
+
+_(We use parentheses for arguments and square brackets for input because
+parentheses allow us to take advantage of keyword arguments which are a good
+fit for command-line options)_
 
 This works both for inputs that are iterables and commands.
 
@@ -1286,7 +1302,7 @@ ways:
 
    msg = "world"
 
-   def greeting(msg):
+   def greeting():
        print(f"hello {msg}")
    ```
 

@@ -9,17 +9,17 @@ def test_pipe_command_to_command():
 
 
 def test_pipe_command_to_function():
-    assert (echo("aaa\nbbb") | (lambda output: [item.upper()
-                                                for item in output.split()]) ==
-            ["AAA", "BBB"])
+    assert echo("aaa\nbbb") | (
+        lambda output: [item.upper() for item in output.split()]
+    ) == ["AAA", "BBB"]
 
-    assert (echo("aaa\nbbb") | (lambda stdout: [line.strip().upper()
-                                                for line in stdout]) ==
-            ["AAA", "BBB"])
+    assert echo("aaa\nbbb") | (
+        lambda stdout: [line.strip().upper() for line in stdout]
+    ) == ["AAA", "BBB"]
 
 
 def test_pipe_string_to_command():
-    str("aaa\nbbb" | grep('b')) == "bbb\n"
+    str("aaa\nbbb" | grep("b")) == "bbb\n"
 
 
 def my_input():
@@ -36,15 +36,16 @@ def my_output(stdout):
 
 
 def test_long_pipe():
-    assert (str(my_input() | cat | grep('line') | my_output | grep("TWO")).
-            strip() ==
-            "LINE TWO\nLINE TWO")
+    assert (
+        str(my_input() | cat | grep("line") | my_output | grep("TWO")).strip()
+        == "LINE TWO\nLINE TWO"
+    )
 
 
 def upperize():
     line = yield
     while True:
-        line = (yield line.upper())
+        line = yield line.upper()
 
 
 def test_pipe_to_generator():

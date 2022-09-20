@@ -1,37 +1,181 @@
-from pipepy import cd, pymake  # Of course we will use pipepy to test pymake
-from pipepy.pymake import _pymake
+import tempfile
+
+from pipepy import cd, export
+from pipepy import pymake as pymake_cmd
+from pipepy.pymake import pymake
+
+from .utils import strip_leading_spaces
 
 
 def test_pymake_simple():
-    with cd('src/tests/playground'):
-        assert str(pymake.echo1) == "hello world\n"
-        _pymake('echo1')  # Run it again, for coverage
-        assert str(pymake.echo2) == "hello world\n"
-        _pymake('echo2')  # Run it again, for coverage
-        assert str(pymake.echo3) == "hello world\nhello world\n"
-        _pymake('echo3')  # Run it again, for coverage
-
-
-def test_pymake_args():
-    with cd('src/tests/playground'):
-        assert str(pymake.echo1('msg1=Bill')) == "hello Bill\n"
-        _pymake('echo1', "msg1=Bill")  # Run it again, for coverage
-        assert str(pymake.echo2('msg2=Mary')) == "hello Mary\n"
-        _pymake('echo2', "msg2=Mary")  # Run it again, for coverage
-        assert (str(pymake.echo3('msg1=Bill', 'msg2=Mary')) ==
-                "hello Bill\nhello Mary\n")
-        _pymake('echo3', "msg1=Bill", "msg2=Mary")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    def hello():
+                        print("Hello world")
+                """
+                    )
+                )
+            assert str(pymake_cmd.hello) == "Hello world\n"
+            pymake("hello")
 
 
 def test_pymake_default_target():
-    with cd('src/tests/playground'):
-        assert str(pymake) == "hello world\n"
-        _pymake()
-        assert str(pymake('msg1=Bill')) == "hello Bill\n"
-        _pymake("msg1=Bill")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    DEFAULT_PYMAKE_TARGET = "hello"
+
+                    def hello():
+                        print("Hello world")
+                """
+                    )
+                )
+            assert str(pymake_cmd) == "Hello world\n"
+            pymake()
 
 
 def test_pymake_dependencies():
-    with cd('src/tests/playground'):
-        assert str(pymake.echo4('msg1=Bill')) == "hello Bill\nhello world\n"
-        _pymake('echo4', "msg1=Bill")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    def func1():
+                        print("func1")
+
+                    def func2(func1):
+                        print("func2")
+                """
+                    )
+                )
+            assert str(pymake_cmd.func2) == "func1\nfunc2\n"
+            pymake("func2")
+
+
+def test_pymake_dependencies_only_called_once():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    def func1():
+                        print("func1")
+
+                    def func2(func1):
+                        print("func2")
+
+                    def func3(func1, func2):
+                        print("func3")
+                """
+                    )
+                )
+            assert str(pymake_cmd.func3) == "func1\nfunc2\nfunc3\n"
+            pymake("func3")
+
+
+def test_custom_makefile():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("custom_makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    def hello():
+                        print("Hello world")
+                """
+                    )
+                )
+            assert str(pymake_cmd("custom_makefile.py").hello) == "Hello world\n"
+            pymake("custom_makefile.py", "hello")
+
+
+def test_pymake_kwarg_from_command_line():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    def hello(msg="world"):
+                        print(f"Hello {msg}")
+                """
+                    )
+                )
+            assert str(pymake_cmd.hello) == "Hello world\n"
+            pymake("hello")
+            assert str(pymake_cmd.hello("msg=Bill")) == "Hello Bill\n"
+            pymake("hello", "msg=bill")
+
+
+def test_pymake_kwarg_from_envronment():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    def hello(msg="world"):
+                        print(f"Hello {msg}")
+                """
+                    )
+                )
+            assert str(pymake_cmd.hello) == "Hello world\n"
+            pymake("hello")
+            with export(msg="Bill"):
+                assert str(pymake_cmd.hello) == "Hello world\n"
+                pymake("hello")
+                assert str(pymake_cmd("-e").hello) == "Hello Bill\n"
+                pymake("-e", "hello")
+
+
+def test_pymake_var_from_command_line():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    msg = "world"
+
+                    def hello():
+                        print(f"Hello {msg}")
+                """
+                    )
+                )
+            assert str(pymake_cmd.hello) == "Hello world\n"
+            pymake("hello")
+            assert str(pymake_cmd.hello("msg=Bill")) == "Hello Bill\n"
+            pymake("hello", "msg=bill")
+
+
+def test_pymake_var_from_envronment():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with cd(tmpdir):
+            with open("Makefile.py", "w") as f:
+                f.write(
+                    strip_leading_spaces(
+                        """
+                    msg = "world"
+
+                    def hello():
+                        print(f"Hello {msg}")
+                """
+                    )
+                )
+            assert str(pymake_cmd.hello) == "Hello world\n"
+            pymake("hello")
+            with export(msg="Bill"):
+                assert str(pymake_cmd.hello) == "Hello world\n"
+                pymake("hello")
+
+                assert str(pymake_cmd("-e").hello) == "Hello Bill\n"
+                pymake("-e", "hello")
