@@ -5,11 +5,9 @@ import time
 
 parser = argparse.ArgumentParser(description="Print messages for testing")
 parser.add_argument("-c", "--count", type=int, default=-1)
-parser.add_argument("-d", "--delay", type=float, default=.1)
+parser.add_argument("-d", "--delay", type=float, default=0.1)
 parser.add_argument("-m", "--message", default="")
-parser.add_argument("-s", "--stream",
-                    choices=['stdout', 'stderr'],
-                    default="stdout")
+parser.add_argument("-s", "--stream", choices=["stdout", "stderr"], default="stdout")
 
 if __name__ == "__main__":
     args = parser.parse_args()

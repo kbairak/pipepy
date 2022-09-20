@@ -4,14 +4,14 @@ from copy import copy
 
 from pipepy import PipePy, cat, grep
 
-student_command = PipePy('python', 'src/tests/playground/math_quiz_student.py')
-teacher_command = PipePy('python', 'src/tests/playground/math_quiz_teacher.py')
+student_command = PipePy("python", "src/tests/playground/math_quiz_student.py")
+teacher_command = PipePy("python", "src/tests/playground/math_quiz_teacher.py")
 
 
 def python_student(stdin, stdout, up):
-    """ Interacts with stdin and stdout as a student to a math quiz
+    """Interacts with stdin and stdout as a student to a math quiz
 
-        `up` should either be `range(X)` or `itertools.count()`
+    `up` should either be `range(X)` or `itertools.count()`
     """
 
     result = []
@@ -31,9 +31,9 @@ def python_student(stdin, stdout, up):
 
 
 def python_teacher(stdin, stdout, up):
-    """ Interacts with stdin and stdout as a teacher to a math quiz
+    """Interacts with stdin and stdout as a teacher to a math quiz
 
-        `up` should either be `range(X)` or `itertools.count()`
+    `up` should either be `range(X)` or `itertools.count()`
     """
 
     # `up` should either be `range(X)` or `itertools.count()`
@@ -102,8 +102,7 @@ def test_inspect_result():
 
 def test_long_pipe():
     result = []
-    with (cat | grep("foo") | cat | cat | grep("foo") | cat) as (
-            stdin, stdout, stderr):
+    with (cat | grep("foo") | cat | cat | grep("foo") | cat) as (stdin, stdout, stderr):
         stdin.write("bar\n")
         stdin.write("foo\n")
         stdin.close()

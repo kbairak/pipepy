@@ -5,17 +5,17 @@ import time
 import pipepy
 from pipepy import PipePy, cat, echo, false, grep, ls, rm, true
 
-echo_messages = PipePy('python', 'src/tests/playground/echo_messages.py')
+echo_messages = PipePy("python", "src/tests/playground/echo_messages.py")
 
 
 def test_return_properties():
     assert true.returncode == 0
     assert false.returncode != 0
-    assert echo('hello world').stdout == "hello world\n"
-    assert (echo_messages(stream="stderr",
-                          count=1,
-                          message="hello world").stderr ==
-            "hello world\n")
+    assert echo("hello world").stdout == "hello world\n"
+    assert (
+        echo_messages(stream="stderr", count=1, message="hello world").stderr
+        == "hello world\n"
+    )
 
 
 def test_bool():
@@ -26,30 +26,35 @@ def test_bool():
 def test_str():
     assert str(echo("hello world")) == "hello world\n"
     assert str(echo("καλημέρα", _text=False)) == "καλημέρα\n"
-    assert (str("καλημέρα".encode('iso-8859-7') |
-                cat(_text=False, _encoding='iso-8859-7')) ==
-            "καλημέρα")
+    assert (
+        str("καλημέρα".encode("iso-8859-7") | cat(_text=False, _encoding="iso-8859-7"))
+        == "καλημέρα"
+    )
 
 
 def test_as_table():
-    (("field1 field2\nvalue1 value2\nvalue3 value4\n" | cat).as_table() ==
-     [{'field1': "value1", 'field2': "value2"},
-      {'field1': "value3", 'field2': "value4"}])
+    (
+        ("field1 field2\nvalue1 value2\nvalue3 value4\n" | cat).as_table()
+        == [
+            {"field1": "value1", "field2": "value2"},
+            {"field1": "value3", "field2": "value4"},
+        ]
+    )
 
 
 def test_iter():
     assert list(echo("a\nb\nc")) == ["a\n", "b\n", "c\n"]
-    assert list(echo('a', 'b', 'c').iter_words()) == ["a", "b", "c"]
+    assert list(echo("a", "b", "c").iter_words()) == ["a", "b", "c"]
 
     tic = None
-    delay = .01
-    for i, line in enumerate(echo_messages(count=3,
-                                           delay=delay,
-                                           message='hello world {}')):
+    delay = 0.01
+    for i, line in enumerate(
+        echo_messages(count=3, delay=delay, message="hello world {}")
+    ):
         toc = time.time()
         if tic is not None:
             # Verify that the message is indeed delayed
-            assert toc - tic > .8 * delay
+            assert toc - tic > 0.8 * delay
         assert line.strip() == f"hello world {i}"
         tic = time.time()
 

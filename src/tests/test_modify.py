@@ -2,7 +2,7 @@ from pipepy import PipePy, git, ls
 
 
 def test_no_modify():
-    assert PipePy('foo')._args == ["foo"]
+    assert PipePy("foo")._args == ["foo"]
 
 
 def test_converts_to_str():
@@ -10,9 +10,9 @@ def test_converts_to_str():
 
 
 def test_glob():
-    assert (sorted(PipePy('src/tests/playground/globtest*')._args) ==
-            sorted(['src/tests/playground/globtest1',
-                    'src/tests/playground/globtest2']))
+    assert sorted(PipePy("src/tests/playground/globtest*")._args) == sorted(
+        ["src/tests/playground/globtest1", "src/tests/playground/globtest2"]
+    )
 
 
 def test_kwargs():
@@ -25,12 +25,12 @@ def test_kwargs():
 
 
 def test_kwargs_first():
-    assert PipePy(key="value")('a')._args == ["--key=value", "a"]
+    assert PipePy(key="value")("a")._args == ["--key=value", "a"]
 
 
 def test_sub():
-    assert (ls - 'l')._args == ["ls", "-l"]
-    assert (ls - 'escape')._args == ["ls", "--escape"]
+    assert (ls - "l")._args == ["ls", "-l"]
+    assert (ls - "escape")._args == ["ls", "--escape"]
 
 
 def test_getattr():
