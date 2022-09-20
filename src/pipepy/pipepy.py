@@ -3,12 +3,13 @@ import io
 import pathlib
 import reprlib
 import types
+from collections.abc import Iterable
 from copy import copy
 from glob import glob
 from subprocess import PIPE, Popen, TimeoutExpired
 
 from .exceptions import PipePyError
-from .utils import _File, is_iterable
+from .utils import _File
 
 ALWAYS_RAISE = False
 ALWAYS_STREAM = False
@@ -276,8 +277,6 @@ class PipePy:
             >>> PipePy('ls', '--sort=size', '-l')
         """
 
-        args = [str(arg) for arg in args]
-
         final_args = []
         for arg in args:
             arg = str(arg)
@@ -290,7 +289,10 @@ class PipePy:
         for key, value in kwargs.items():
             key = key.replace("_", "-")
             if value is True:
-                final_args.append(f"--{key}")
+                if len(key) == 1:
+                    final_args.append(f"-{key}")
+                else:
+                    final_args.append(f"--{key}")
             elif value is False:
                 final_args.append(f"--no-{key}")
             elif len(key) == 1:
@@ -301,7 +303,7 @@ class PipePy:
 
     # Lifetime implementation
     def _evaluate(self):
-        """Start an evaluations, Lazy commands that have been evaluated before
+        """Start an evaluation, Lazy commands that have been evaluated before
         will abort. The lifetime of a command being evaluated consists of 3
         steps:
 
@@ -341,7 +343,9 @@ class PipePy:
                 self._input._start_background_job(stdin_to_pipe=stdin_to_pipe)
                 stdin = self._input._process.stdout
         elif (
-            is_iterable(self._input) or stdin_to_pipe or isinstance(self._input, _File)
+            isinstance(self._input, Iterable)
+            or stdin_to_pipe
+            or isinstance(self._input, _File)
         ):
             stdin = PIPE
         else:
@@ -405,7 +409,7 @@ class PipePy:
                     self._process.stdin.write(line)
                     self._process.stdin.flush()
                 self._process.stdin.close()
-        elif is_iterable(left):
+        elif isinstance(left, Iterable):
             if isinstance(left, (str, bytes)):
                 left = [left]
             for chunk in left:
@@ -802,7 +806,7 @@ class PipePy:
         if isinstance(left, PipePy) and isinstance(right, PipePy):
             return right(_input=left)
         elif isinstance(right, PipePy):
-            if is_iterable(left):
+            if isinstance(left, Iterable):
                 return right(_input=left)
             else:
                 return NotImplemented
