@@ -91,7 +91,7 @@ def pymake(*args):
     targets = []
     for arg in args:
         if "=" in arg:
-            key, value = arg.split("=")
+            key, value = arg.split("=", 1)
             if hasattr(Makefile, key):
                 setattr(Makefile, key, value)
             command_args[key] = value
@@ -184,7 +184,11 @@ def _pymake_complete(args):
                 continue
             if func.__doc__:
                 doc = func.__doc__
-                doc = doc.replace("'", "\\'").replace(":", "\\:").replace("\\", "\\\\")
+                doc = (
+                    doc.replace("\\", "\\\\")
+                    .replace(":", "\\:")
+                    .replace("'", "'\"'\"'")
+                )
                 doc = " ".join([line.strip() for line in doc.splitlines()])
                 result += f" '{attr}:{doc}'"
             else:

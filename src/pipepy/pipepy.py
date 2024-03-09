@@ -42,6 +42,20 @@ def set_interactive(value):
     INTERACTIVE = value
 
 
+# Forward calls to background process
+def _map_to_background_process(method):
+    """Expose the `send_signal`, `terminate` and `kill` methods of Popen
+    objects to PipePy objects.
+    """
+
+    def func(self, *args, **kwargs):
+        if self._process is None:
+            raise TypeError(f"Cannot call '{method}' on non-background process")
+        getattr(self._process, method)(*args, **kwargs)
+
+    return func
+
+
 class PipePy:
     # Init and copies
     def __init__(
@@ -921,19 +935,6 @@ class PipePy:
         while isinstance(job._input, PipePy):
             job = job._input
             job.wait()
-
-    # Forward calls to background process
-    def _map_to_background_process(method):
-        """Expose the `send_signal`, `terminate` and `kill` methods of Popen
-        objects to PipePy objects.
-        """
-
-        def func(self, *args, **kwargs):
-            if self._process is None:
-                raise TypeError(f"Cannot call '{method}' on non-background process")
-            getattr(self._process, method)(*args, **kwargs)
-
-        return func
 
     send_signal = _map_to_background_process("send_signal")
     terminate = _map_to_background_process("terminate")
