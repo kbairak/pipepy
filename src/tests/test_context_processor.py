@@ -102,7 +102,7 @@ def test_inspect_result():
 
 def test_long_pipe():
     result = []
-    with (cat | grep("foo") | cat | cat | grep("foo") | cat) as (stdin, stdout, stderr):
+    with cat | grep("foo") | cat | cat | grep("foo") | cat as (stdin, stdout, stderr):
         stdin.write("bar\n")
         stdin.write("foo\n")
         stdin.close()

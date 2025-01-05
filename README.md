@@ -1366,6 +1366,7 @@ You can put the `eval` statements in your `.bashrc`/`.zshrc`.
 - [x] Redirect input/output from/to file-like objects
 - [ ] Stream and capture at the same time (wrapper class for file-like object?)
 - [ ] `with` blocks where PipePy invocations forward to the context's stdin, eg:
+- [ ] pymake to keep track of file dates and skip steps
 
   ```python
   from pipepy import ssh

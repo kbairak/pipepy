@@ -60,7 +60,7 @@ def checks():
 
     flake8()
     isort(".", check_only=True)()
-    black(".")
+    black(".")()
 
 
 def clean():
