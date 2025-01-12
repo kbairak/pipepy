@@ -3,10 +3,11 @@ import io
 import pathlib
 import reprlib
 import types
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from copy import copy
 from glob import glob
 from subprocess import PIPE, Popen, TimeoutExpired
+from typing import IO, Any, Callable, Self
 
 from .exceptions import PipePyError
 from .utils import _File
@@ -15,10 +16,10 @@ ALWAYS_RAISE = False
 ALWAYS_STREAM = False
 INTERACTIVE = False
 
-_JOBS = {}
+_JOBS: dict[int, "PipePy"] = {}
 
 
-def jobs():
+def jobs() -> list["PipePy"]:
     return list(_JOBS.values())
 
 
@@ -60,16 +61,16 @@ class PipePy:
     # Init and copies
     def __init__(
         self,
-        *args,
-        _lazy=False,
-        _input=None,
-        _stream_stdout=None,
-        _stream_stderr=None,
-        _stream=None,
-        _text=True,
-        _encoding="UTF-8",
-        _raise=None,
-        **kwargs,
+        *args: Iterable,
+        _lazy: bool = False,
+        _input: Self | Iterable | _File | None = None,
+        _stream_stdout: bool | None = None,
+        _stream_stderr: bool | None = None,
+        _stream: bool | None = None,
+        _text: bool = True,
+        _encoding: str = "UTF-8",
+        _raise: bool | None = None,
+        **kwargs: dict[str, Any],
     ):
         """Initialize a PipePy object.
 
@@ -132,25 +133,25 @@ class PipePy:
         self._encoding = _encoding
         self._raise = _raise
 
-        self._process = None
+        self._process: Popen | None = None
         self._input_consumed = False
 
-        self._returncode = None
+        self._returncode: int | None = None
         self._stdout = None
         self._stderr = None
 
     def __call__(
         self,
-        *args,
+        *args: Sequence,
         _input=None,
-        _stream_stdout=None,
-        _stream_stderr=None,
-        _stream=None,
-        _text=None,
-        _encoding=None,
-        _raise=None,
-        **kwargs,
-    ):
+        _stream_stdout: bool | None = None,
+        _stream_stderr: bool | None = None,
+        _stream: bool | None = None,
+        _text: bool | None = None,
+        _encoding: str | None = None,
+        _raise: bool | None = None,
+        **kwargs: dict[str, Any],
+    ) -> Self:
         """Make and return a copy of `self`, overriding some of its
         parameters.
 
@@ -174,7 +175,7 @@ class PipePy:
             and not kwargs
         )
 
-        args = self._args + list(args)
+        actual_args = self._args + list(args)
         if _input is None:
             _input = self._input
         if _stream_stdout is None:
@@ -191,7 +192,7 @@ class PipePy:
             _raise = self._raise
 
         result = self.__class__(
-            *args,
+            *actual_args,
             _lazy=True,
             _input=_input,
             _stream_stdout=_stream_stdout,
@@ -206,7 +207,7 @@ class PipePy:
             result._evaluate()
         return result
 
-    def __sub__(left, right):
+    def __sub__(self, right: str) -> "PipePy":
         """Alternate method of adding switches to commands:
 
             >>> ls - 'l'
@@ -221,12 +222,14 @@ class PipePy:
             >>> ls('--escape')
         """
 
+        left = self
+
         if len(right) == 1:
             return left(f"-{right}")
         else:
             return left(f"--{right}")
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Self:
         """Alternate way of pasing arguments to commands. Essentially
 
             >>> git = PipePy('git')
@@ -249,20 +252,20 @@ class PipePy:
             _raise=self._raise,
         )
 
-    def __copy__(self):
+    def __copy__(self) -> Self:
         return self.__class__(
             *self._args,
             _lazy=True,
             _input=copy(self._input),
             _stream_stdout=self._stream_stdout,
-            _stream_stderr=self._stderr,
+            _stream_stderr=self._stream_stderr,
             _stream=self._stream,
             _text=self._text,
             _encoding=self._encoding,
         )
 
     @staticmethod
-    def _convert_args(args, kwargs):
+    def _convert_args(args: Iterable, kwargs: dict[str, Any]) -> list[str]:
         """Do some fancy processing of arguments. The intention is to enable
         things like:
 
@@ -291,11 +294,10 @@ class PipePy:
             >>> PipePy('ls', '--sort=size', '-l')
         """
 
-        final_args = []
+        final_args: list[str] = []
         for arg in args:
             arg = str(arg)
-            globbed = glob(arg, recursive=True)
-            if globbed:
+            if globbed := glob(arg, recursive=True):
                 final_args.extend(globbed)
             else:
                 final_args.append(arg)
@@ -338,7 +340,7 @@ class PipePy:
         self._feed_input()
         self.wait()
 
-    def _start_background_job(self, stdin_to_pipe=False):
+    def _start_background_job(self, stdin_to_pipe: bool = False):
         """Starts the process that will carry out the command. If the process
         has already been started, it will abort. If the input to this
         command is another PipePy object, its background process will be
@@ -350,11 +352,13 @@ class PipePy:
         if self._process is not None and self._lazy:
             return
 
+        stdin: IO[Any] | int | None
         if isinstance(self._input, PipePy):
             if self._input._returncode is not None:
                 stdin = PIPE
             else:
                 self._input._start_background_job(stdin_to_pipe=stdin_to_pipe)
+                assert self._input._process is not None
                 stdin = self._input._process.stdout
         elif (
             isinstance(self._input, Iterable)
@@ -398,15 +402,13 @@ class PipePy:
             if left._returncode is not None:
                 chunk = left.stdout
                 if self._text:
-                    try:
+                    if isinstance(chunk, bytes):
                         chunk = chunk.decode(self._encoding)
-                    except AttributeError:
-                        pass
                 else:
-                    try:
+                    if isinstance(chunk, str):
                         chunk = chunk.encode(self._encoding)
-                    except AttributeError:
-                        pass
+                assert self._process is not None
+                assert self._process.stdin is not None
                 self._process.stdin.write(chunk)
                 self._process.stdin.flush()
                 self._process.stdin.close()
@@ -419,6 +421,8 @@ class PipePy:
                 mode="r" if self._text else "rb",
                 encoding=self._encoding if self._text else None,
             ) as f:
+                assert self._process is not None
+                assert self._process.stdin is not None
                 for line in f:
                     self._process.stdin.write(line)
                     self._process.stdin.flush()
@@ -426,17 +430,15 @@ class PipePy:
         elif isinstance(left, Iterable):
             if isinstance(left, (str, bytes)):
                 left = [left]
+            assert self._process is not None
+            assert self._process.stdin is not None
             for chunk in left:
                 if self._text:
-                    try:
+                    if isinstance(chunk, bytes):
                         chunk = chunk.decode(self._encoding)
-                    except AttributeError:
-                        pass
                 else:
-                    try:
+                    if isinstance(chunk, str):
                         chunk = chunk.encode(self._encoding)
-                    except AttributeError:
-                        pass
                 self._process.stdin.write(chunk)
                 self._process.stdin.flush()
             self._process.stdin.close()
@@ -444,7 +446,7 @@ class PipePy:
         self._input_consumed = True
 
     # Control lifetime
-    def delay(self):
+    def delay(self) -> Self:
         """Create and return a copy of `self` and perform 2 out of 3 steps of
         its evaluation, ie don't wait for its result.
 
@@ -481,6 +483,7 @@ class PipePy:
             >>> print("Job finished")
         """
 
+        assert self._process is not None
         try:
             self._stdout, self._stderr = self._process.communicate(timeout=timeout)
             self._returncode = self._process.wait()
@@ -527,37 +530,41 @@ class PipePy:
 
     # Getting output
     @property
-    def returncode(self):
+    def returncode(self) -> int:
         """Evaluate the command and return its returncode."""
 
         self._evaluate()
+        assert self._returncode is not None
         return self._returncode
 
     @property
-    def stdout(self):
+    def stdout(self) -> str | bytes:
         """Evaluate the command and return its stdout."""
 
         self._evaluate()
+        assert isinstance(self._stdout, (str, bytes))
         return self._stdout
 
     @property
-    def stderr(self):
+    def stderr(self) -> str | bytes:
         """Evaluate the command and return its stderr."""
 
         self._evaluate()
+        assert self._stderr is not None
         return self._stderr
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return stdout as string, even if the command has `_text=False`."""
 
-        try:
-            return self.stdout.decode(self._encoding)
-        except UnicodeDecodeError:
-            return str(self.stdout)
-        except AttributeError:
+        if isinstance(self.stdout, bytes):
+            try:
+                return self.stdout.decode(self._encoding)
+            except UnicodeDecodeError:
+                return str(self.stdout)
+        else:
             return self.stdout
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         """Use in boolean expressions.
 
         Usage:
@@ -571,7 +578,7 @@ class PipePy:
 
         return self.returncode == 0
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str | bytes]:
         """Support the iteration interface:
 
         Usage:
@@ -586,10 +593,12 @@ class PipePy:
         else:
             self._start_background_job()
             self._feed_input()
+            assert self._process is not None
+            assert self._process.stdout is not None
             yield from self._process.stdout
             self.wait()
 
-    def iter_words(self):
+    def iter_words(self) -> Iterator[str | bytes]:
         """Iterate over the *words* of the output of the command.
 
         >>> ps = PipePy('ps')
@@ -603,7 +612,7 @@ class PipePy:
         for line in self:
             yield from line.split()
 
-    def as_table(self):
+    def as_table(self) -> list[dict]:
         """Usage:
 
         >>> ps = PipePy('ps')
@@ -625,7 +634,7 @@ class PipePy:
             result.append(item)
         return result
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return some useful information about the PipePy object.
 
         If `pipepy.INTERACTIVE` is set, it will evaluate and print the
@@ -640,7 +649,11 @@ class PipePy:
         """
 
         if INTERACTIVE:
-            return self._interactive_repr()
+            result = self._interactive_repr()
+            if isinstance(result, bytes):
+                return result.decode(self._encoding)
+            else:
+                return result
         else:
             return self._normal_repr()
 
@@ -658,11 +671,16 @@ class PipePy:
         result.append(")")
         return "".join(result)
 
-    def _interactive_repr(self):
-        return self.stdout + self.stderr
+    def _interactive_repr(self) -> str | bytes:
+        if isinstance(self.stdout, str) and isinstance(self.stderr, str):
+            return self.stdout + self.stderr
+        elif isinstance(self.stdout, bytes) and isinstance(self.stderr, bytes):
+            return self.stdout + self.stderr
+        else:
+            raise ValueError("stdout and stderr must be of the same type")
 
     # Redirect output
-    def __gt__(left, right):
+    def __gt__(self, right):
         """Write output to file or file-like object
 
         Usage:
@@ -670,6 +688,8 @@ class PipePy:
             >>> ps = PipePy('ps')
             >>> ps > 'progs.txt'
         """
+
+        left = self
 
         if isinstance(right, (pathlib.Path, str)):
             with open(
@@ -693,7 +713,7 @@ class PipePy:
         else:
             return NotImplemented
 
-    def __rshift__(left, right):
+    def __rshift__(self, right):
         """Append output to file or file-like object
 
         Usage:
@@ -701,6 +721,8 @@ class PipePy:
             >>> ps = PipePy('ps')
             >>> ps >> 'progs.txt'
         """
+
+        left = self
 
         if isinstance(right, (pathlib.Path, str)):
             with open(
@@ -723,7 +745,7 @@ class PipePy:
         else:
             return NotImplemented
 
-    def __lt__(left, right):
+    def __lt__(self, right):
         """Read input from file or file-like object
 
         Usage:
@@ -731,6 +753,8 @@ class PipePy:
             >>> grep = PipePy('grep')
             >>> grep('python') < 'progs/txt'
         """
+
+        left = self
 
         if isinstance(right, (pathlib.Path, str)):
             return left(_input=_File(right))
@@ -740,13 +764,15 @@ class PipePy:
             return NotImplemented
 
     # Pipes
-    def __or__(left, right):
+    def __or__(self, right: "PipePy | Callable | types.GeneratorType") -> "PipePy":
+        left = self
         return PipePy._pipe(left, right)
 
-    def __ror__(right, left):
+    def __ror__(self, left: "PipePy | Iterable") -> "PipePy":
+        right = self
         return PipePy._pipe(left, right)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: "PipePy | Iterable"):
         """Use square-bracket notation for input. Essentially
 
             >>> foo | bar
@@ -759,7 +785,9 @@ class PipePy:
         return PipePy._pipe(index, self)
 
     @staticmethod
-    def _pipe(left, right):
+    def _pipe(
+        left: "PipePy | Iterable", right: "PipePy | Callable | types.GeneratorType"
+    ):
         """Support pipe operations. Depending on the operands, slightly
         different behaviors emerge:
 
@@ -822,23 +850,19 @@ class PipePy:
         elif isinstance(right, PipePy):
             if isinstance(left, Iterable):
                 return right(_input=left)
-            else:
-                return NotImplemented
         elif isinstance(left, PipePy):
             if callable(right):
                 return left._send_output_to_function(right)
             elif isinstance(right, types.GeneratorType):
                 return left._send_output_to_generator(right)
-            else:
-                return NotImplemented
         else:
             return NotImplemented
 
     # Help with pipes
-    def _send_output_to_function(self, func):
+    def _send_output_to_function(self, func: Callable) -> Any:
         """Implement the "pipe to function" functionality"""
 
-        error = TypeError(f"Cannot pipe to {func!r}: " "Invalid function signature")
+        error = TypeError(f"Cannot pipe to {func!r}: Invalid function signature")
         parameters = inspect.signature(func).parameters
         if not parameters:
             raise error
@@ -850,6 +874,7 @@ class PipePy:
         ):
             raise error
         keys = set(parameters.keys())
+        arguments: dict[str, Any]
         if keys <= {"returncode", "output", "errors"}:
             arguments = {
                 "returncode": self.returncode,
@@ -861,6 +886,7 @@ class PipePy:
         elif keys <= {"stdout", "stderr"}:
             self._start_background_job()
             self._feed_input()
+            assert self._process is not None
             arguments = {"stdout": self._process.stdout, "stderr": self._process.stderr}
             kwargs = {key: value for key, value in arguments.items() if key in keys}
             result = func(**kwargs)
@@ -877,14 +903,17 @@ class PipePy:
         else:
             raise error
 
-    def _send_output_to_generator(self, generator):
+    def _send_output_to_generator(self, generator: types.GeneratorType) -> Any:
         """Implement the "pipe to generator" functionality"""
 
         def result():
             self._start_background_job()
             self._feed_input()
+            assert self._process is not None
             stdout = (
-                line.strip() + "\n" for line in self._process.stdout if line.strip()
+                line.strip() + "\n"
+                for line in self._process.stdout or []
+                if line.strip()
             )
             try:
                 next_input = next(generator)
@@ -922,13 +951,18 @@ class PipePy:
         while isinstance(job._input, PipePy):
             job = job._input
 
+        assert job._process is not None and self._process is not None
+
         return job._process.stdin, self._process.stdout, self._process.stderr
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         job = self
         while isinstance(job._input, PipePy):
             job = job._input
-        job._process.stdin.close()
+
+        assert job._process is not None
+        if job._process.stdin is not None:
+            job._process.stdin.close()
 
         self.wait()
         job = self
