@@ -3,23 +3,23 @@ import io
 import pathlib
 import reprlib
 import types
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator
 from copy import copy
 from glob import glob
 from subprocess import PIPE, Popen, TimeoutExpired
-from typing import IO, Any, Callable, Self
+from typing import IO, Any, Callable, Optional, Union
 
 from .exceptions import PipePyError
-from .utils import _File
+from .utils import File
 
 ALWAYS_RAISE = False
 ALWAYS_STREAM = False
 INTERACTIVE = False
 
-_JOBS: dict[int, "PipePy"] = {}
+_JOBS: "dict[int, PipePy]" = {}
 
 
-def jobs() -> list["PipePy"]:
+def jobs() -> "list[PipePy]":
     return list(_JOBS.values())
 
 
@@ -61,16 +61,16 @@ class PipePy:
     # Init and copies
     def __init__(
         self,
-        *args: Iterable,
+        *args: Any,
         _lazy: bool = False,
-        _input: Self | Iterable | _File | None = None,
-        _stream_stdout: bool | None = None,
-        _stream_stderr: bool | None = None,
-        _stream: bool | None = None,
+        _input: "Optional[Union[PipePy, Iterable, File]]" = None,
+        _stream_stdout: Optional[bool] = None,
+        _stream_stderr: Optional[bool] = None,
+        _stream: Optional[bool] = None,
         _text: bool = True,
         _encoding: str = "UTF-8",
-        _raise: bool | None = None,
-        **kwargs: dict[str, Any],
+        _raise: Optional[bool] = None,
+        **kwargs: Any,
     ):
         """Initialize a PipePy object.
 
@@ -133,25 +133,25 @@ class PipePy:
         self._encoding = _encoding
         self._raise = _raise
 
-        self._process: Popen | None = None
+        self._process: Optional[Popen] = None
         self._input_consumed = False
 
-        self._returncode: int | None = None
+        self._returncode: Optional[int] = None
         self._stdout = None
         self._stderr = None
 
     def __call__(
         self,
-        *args: Sequence,
+        *args: Any,
         _input=None,
-        _stream_stdout: bool | None = None,
-        _stream_stderr: bool | None = None,
-        _stream: bool | None = None,
-        _text: bool | None = None,
-        _encoding: str | None = None,
-        _raise: bool | None = None,
-        **kwargs: dict[str, Any],
-    ) -> Self:
+        _stream_stdout: Optional[bool] = None,
+        _stream_stderr: Optional[bool] = None,
+        _stream: Optional[bool] = None,
+        _text: Optional[bool] = None,
+        _encoding: Optional[str] = None,
+        _raise: Optional[bool] = None,
+        **kwargs: Any,
+    ) -> "PipePy":
         """Make and return a copy of `self`, overriding some of its
         parameters.
 
@@ -229,7 +229,7 @@ class PipePy:
         else:
             return left(f"--{right}")
 
-    def __getattr__(self, attr: str) -> Self:
+    def __getattr__(self, attr: str) -> "PipePy":
         """Alternate way of pasing arguments to commands. Essentially
 
             >>> git = PipePy('git')
@@ -252,7 +252,7 @@ class PipePy:
             _raise=self._raise,
         )
 
-    def __copy__(self) -> Self:
+    def __copy__(self) -> "PipePy":
         return self.__class__(
             *self._args,
             _lazy=True,
@@ -352,7 +352,7 @@ class PipePy:
         if self._process is not None and self._lazy:
             return
 
-        stdin: IO[Any] | int | None
+        stdin: Optional[Union[IO[Any], int]]
         if isinstance(self._input, PipePy):
             if self._input._returncode is not None:
                 stdin = PIPE
@@ -363,7 +363,7 @@ class PipePy:
         elif (
             isinstance(self._input, Iterable)
             or stdin_to_pipe
-            or isinstance(self._input, _File)
+            or isinstance(self._input, File)
         ):
             stdin = PIPE
         else:
@@ -415,7 +415,7 @@ class PipePy:
             else:
                 left._start_background_job()
                 left._feed_input()
-        elif isinstance(left, _File):
+        elif isinstance(left, File):
             with open(
                 left.filename,
                 mode="r" if self._text else "rb",
@@ -446,7 +446,7 @@ class PipePy:
         self._input_consumed = True
 
     # Control lifetime
-    def delay(self) -> Self:
+    def delay(self) -> "PipePy":
         """Create and return a copy of `self` and perform 2 out of 3 steps of
         its evaluation, ie don't wait for its result.
 
@@ -538,7 +538,7 @@ class PipePy:
         return self._returncode
 
     @property
-    def stdout(self) -> str | bytes:
+    def stdout(self) -> Union[str, bytes]:
         """Evaluate the command and return its stdout."""
 
         self._evaluate()
@@ -546,7 +546,7 @@ class PipePy:
         return self._stdout
 
     @property
-    def stderr(self) -> str | bytes:
+    def stderr(self) -> Union[str, bytes]:
         """Evaluate the command and return its stderr."""
 
         self._evaluate()
@@ -578,7 +578,7 @@ class PipePy:
 
         return self.returncode == 0
 
-    def __iter__(self) -> Iterator[str | bytes]:
+    def __iter__(self) -> Iterator[Union[str, bytes]]:
         """Support the iteration interface:
 
         Usage:
@@ -598,7 +598,7 @@ class PipePy:
             yield from self._process.stdout
             self.wait()
 
-    def iter_words(self) -> Iterator[str | bytes]:
+    def iter_words(self) -> Iterator[Union[str, bytes]]:
         """Iterate over the *words* of the output of the command.
 
         >>> ps = PipePy('ps')
@@ -671,7 +671,7 @@ class PipePy:
         result.append(")")
         return "".join(result)
 
-    def _interactive_repr(self) -> str | bytes:
+    def _interactive_repr(self) -> Union[str, bytes]:
         if isinstance(self.stdout, str) and isinstance(self.stderr, str):
             return self.stdout + self.stderr
         elif isinstance(self.stdout, bytes) and isinstance(self.stderr, bytes):
@@ -757,22 +757,22 @@ class PipePy:
         left = self
 
         if isinstance(right, (pathlib.Path, str)):
-            return left(_input=_File(right))
+            return left(_input=File(right))
         elif isinstance(right, io.IOBase):
             return left(_input=iter(right))
         else:
             return NotImplemented
 
     # Pipes
-    def __or__(self, right: "PipePy | Callable | types.GeneratorType") -> "PipePy":
+    def __or__(self, right: "Union[PipePy, Callable, types.GeneratorType]") -> "PipePy":
         left = self
         return PipePy._pipe(left, right)
 
-    def __ror__(self, left: "PipePy | Iterable") -> "PipePy":
+    def __ror__(self, left: "Union[PipePy, Iterable]") -> "PipePy":
         right = self
         return PipePy._pipe(left, right)
 
-    def __getitem__(self, index: "PipePy | Iterable"):
+    def __getitem__(self, index: "Union[PipePy, Iterable]"):
         """Use square-bracket notation for input. Essentially
 
             >>> foo | bar
@@ -786,7 +786,8 @@ class PipePy:
 
     @staticmethod
     def _pipe(
-        left: "PipePy | Iterable", right: "PipePy | Callable | types.GeneratorType"
+        left: "Union[PipePy, Iterable]",
+        right: "Union[PipePy, Callable, types.GeneratorType]",
     ):
         """Support pipe operations. Depending on the operands, slightly
         different behaviors emerge:

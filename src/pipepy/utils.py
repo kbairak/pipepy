@@ -1,6 +1,6 @@
-class _File:
+class File:
     """Simple container for a filename. Mainly needed to be able to run
-    `isinstance(..., _FILE)`
+    `isinstance(..., FILE)`
     """
 
     def __init__(self, filename):

@@ -2,6 +2,9 @@ import importlib.util
 import inspect
 import os
 import sys
+from collections.abc import Sequence
+from types import ModuleType
+from typing import Any, Union
 
 usage = """
 Usage: pymake [-e] [MAKEFILE] [TARGET_OR_PARAMETER...]
@@ -18,22 +21,16 @@ Options:
 """
 
 
-Makefile = None
-already_run = {}
-command_args = {}
+Makefile: Union[ModuleType, None] = None
+already_run: dict[str, Any] = {}
+command_args: dict[str, Any] = {}
 
 
-def _get_arg(key, use_env=False):
+def _get_arg(key: str) -> Any:
     try:
         return command_args[key]
     except KeyError:
         pass
-
-    if use_env:
-        try:
-            return os.environ[key]
-        except KeyError:
-            pass
 
     try:
         return getattr(Makefile, key)
@@ -43,27 +40,25 @@ def _get_arg(key, use_env=False):
     raise KeyError(key)
 
 
-def _load_makefile(filename="Makefile.py"):
-    global Makefile
-
-    if not os.path.exists(filename):
+def _load_makefile() -> ModuleType:
+    if not os.path.exists("Makefile.py"):
         raise ValueError("Makefile not found")
 
-    name = filename.rsplit(".", 1)[0]
-
-    spec = importlib.util.spec_from_file_location(name, filename)
+    spec = importlib.util.spec_from_file_location("Makefile", "Makefile.py")
+    assert spec is not None
+    assert spec.loader is not None
     Makefile = importlib.util.module_from_spec(spec)
-    sys.modules[name] = Makefile
+    sys.modules["Makefile"] = Makefile
     spec.loader.exec_module(Makefile)
 
+    return Makefile
 
-def pymake(*args):
+
+def pymake(*args: str):
     global Makefile, already_run, command_args
     Makefile = None
     already_run = {}
     command_args = {}
-
-    args = list(args)
 
     if len(args) == 1 and args[0] in ("-h", "--help"):
         print(usage)
@@ -72,21 +67,7 @@ def pymake(*args):
     if _pymake_complete(args):
         return
 
-    use_env = len(args) >= 1 and args[0] in ("-e", "--use-env")
-    if use_env:
-        args = args[1:]
-
-    if len(args) >= 1 and os.path.exists(args[0]):
-        filename = args.pop(0)
-    else:
-        filename = "Makefile.py"
-
-    _load_makefile(filename)
-
-    if use_env:
-        for key in dir(Makefile):
-            if key in os.environ:
-                setattr(Makefile, key, os.environ[key])
+    Makefile = _load_makefile()
 
     targets = []
     for arg in args:
@@ -99,20 +80,23 @@ def pymake(*args):
             targets.append(arg)
 
     if not targets:
-        targets = [Makefile.DEFAULT_PYMAKE_TARGET]
+        try:
+            targets = [Makefile.DEFAULT_PYMAKE_TARGET]
+        except AttributeError:
+            raise ValueError("No targets specified")
 
     for target in targets:
-        _run(target, use_env=use_env)
+        _run(target)
 
 
-def _run(target, use_env=False):
+def _run(target: str):
     function = getattr(Makefile, target)
     parameters = inspect.signature(function).parameters
     args = []
 
     for parameter_name, parameter in parameters.items():
         try:
-            value = _get_arg(parameter_name, use_env)
+            value = _get_arg(parameter_name)
         except KeyError:
             if parameter.default != inspect._empty:
                 value = parameter.default
@@ -121,7 +105,7 @@ def _run(target, use_env=False):
 
         if callable(value):
             if parameter_name not in already_run:
-                already_run[parameter_name] = _run(parameter_name, use_env)
+                already_run[parameter_name] = _run(parameter_name)
             args.append(already_run[parameter_name])
         else:
             args.append(value)
@@ -129,7 +113,7 @@ def _run(target, use_env=False):
     return function(*args)
 
 
-def _pymake_complete(args):
+def _pymake_complete(args: Sequence[str]) -> bool:
     """Setup completion for shells.
 
     The first argument must be `--setup-FOO-completion` or `--complete-FOO`
@@ -145,15 +129,15 @@ def _pymake_complete(args):
     elif args and args[0] == "--complete-bash":
         _load_makefile()
         word = args[-2]
-        result = []
+        chunks = []
         for attr in dir(Makefile):
             if not attr.startswith(word):
                 continue
             func = getattr(Makefile, attr)
             if not callable(func) or getattr(func, "__module__", "") != "Makefile":
                 continue
-            result.append(attr)
-        print("\n".join(result))
+            chunks.append(attr)
+        print("\n".join(chunks))
 
     elif args and args[0] == "--setup-zsh-completion":
         # Register the `_pymake` zsh function to complete pymake calls.
