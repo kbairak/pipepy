@@ -58,9 +58,9 @@ def checks():
 
     from pipepy import black, flake8, isort
 
-    flake8()
-    isort(".", check_only=True)()
-    black(".")()
+    flake8("src")
+    isort("src", check_only=True)()
+    black("src")()
 
 
 def clean():

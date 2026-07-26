@@ -44,6 +44,9 @@ dev = [
     "pytest-watch",
     "mkdocs",
     "mkdocs-material",
+    "black",
+    "flake8",
+    "isort",
 ]
 
 [tool.isort]
