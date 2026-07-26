@@ -1,0 +1,31 @@
+site_name: pipepy
+repo_url: https://github.com/kbairak/pipepy
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.instant
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.extra
+  - admonition
+  - pymdownx.details
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Getting started: getting-started.md
+  - Customizing commands: customizing-commands.md
+  - Laziness: laziness.md
+  - Background commands: background-commands.md
+  - Redirecting output: redirecting.md
+  - Pipes:
+    - Overview: pipes/index.md
+    - PipePy to PipePy: pipes/pipepy-to-pipepy.md
+    - Iterable to PipePy: pipes/iterable-to-pipepy.md
+    - PipePy to function: pipes/pipepy-to-function.md
+    - PipePy to generator: pipes/pipepy-to-generator.md
+    - Chaining: pipes/chaining.md
+  - Interacting with processes: interacting.md
+  - Altering behavior: altering-behavior.md
+  - Utilities: utilities.md
+  - pymake: pymake.md

@@ -1,7 +1,13 @@
-src/pipepy.egg-info
+*.egg-info
+*.egg
+.eggs
 tags
 build
 dist
 .coverage
 htmlcov
 __pycache__
+.venv
+site
+.mypy_cache
+.pytest_cache

@@ -1,9 +1,53 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pipepy"
+version = "0.0.12"
+description = "A Python library for invoking and interacting with shell commands"
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [
+    {name = "Konstantinos Bairaktaris", email = "ikijob@gmail.com"},
 ]
-build-backend = "setuptools.build_meta"
+license = {text = "GPL-3.0-only"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+]
+[project.urls]
+Homepage = "https://github.com/kbairak/pipepy"
+Source = "https://github.com/kbairak/pipepy"
+Tracker = "https://github.com/kbairak/pipepy/issues"
+Changelog = "https://github.com/kbairak/pipepy/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipepy"]
+
+[project.scripts]
+pymake = "pipepy.pymake:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-watch",
+    "mkdocs",
+    "mkdocs-material",
+]
 
 [tool.isort]
 profile = "black"
+
+[tool.flake8]
+max-line-length = 88

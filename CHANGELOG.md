@@ -1,3 +1,18 @@
+# 0.0.12
+
+Features:
+
+- Migrated to uv build system (hatchling)
+- Added mkdocs-based documentation
+- Added type hints to main module
+
+Misc:
+
+- Updated .gitignore for uv/hatchling/mkdocs artifacts
+- Added uv.lock
+- Updated CI to use uv
+- Updated PyPI metadata
+
 # 0.0.9
 
 Bugfixes:

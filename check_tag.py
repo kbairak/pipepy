@@ -1,15 +1,13 @@
 import sys
-
-import pkg_resources
+from importlib.metadata import version as get_version
 
 from pipepy import git
 
 if __name__ == "__main__":
-    # Lets eat our own dogfood :)
     git_tag = str(git.describe(tags=True)).strip()
     print(f"git tag    is: {git_tag}")
 
-    python_tag = pkg_resources.require("pipepy")[0].version
+    python_tag = get_version("pipepy")
     print(f"python tag is: {python_tag}")
 
     if git_tag == python_tag:

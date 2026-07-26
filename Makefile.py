@@ -78,4 +78,6 @@ def build(clean):
 def publish(build):
     """Publish package to PyPI"""
 
-    python("-m", "twine").upload("dist/*")()
+    from pipepy import uv
+
+    uv("publish")()
