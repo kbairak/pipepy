@@ -46,5 +46,8 @@ jobs:
       - name: Check that tag matches package version
         run: python check_tag.py
 
-      - name: Build and publish
+      - name: Build
+        run: uv build
+
+      - name: Publish
         run: uv publish
