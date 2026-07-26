@@ -1,13 +1,26 @@
 import sys
-from importlib.metadata import version as get_version
+import tomllib
 
-from pipepy import git
+
+def get_version():
+    with open("pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    return data["project"]["version"]
+
 
 if __name__ == "__main__":
-    git_tag = str(git.describe(tags=True)).strip()
+    import subprocess
+
+    git_tag = (
+        subprocess.run(
+            ["git", "describe", "--tags"],
+            capture_output=True, text=True
+        )
+        .stdout.strip()
+    )
     print(f"git tag    is: {git_tag}")
 
-    python_tag = get_version("pipepy")
+    python_tag = get_version()
     print(f"python tag is: {python_tag}")
 
     if git_tag == python_tag:
