@@ -1,4 +1,5 @@
 site_name: pipepy
+site_url: https://kbairak.net/pipepy/
 repo_url: https://github.com/kbairak/pipepy
 theme:
   name: material
