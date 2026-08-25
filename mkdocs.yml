@@ -2,6 +2,7 @@ site_name: pipepy
 repo_url: https://github.com/kbairak/pipepy
 theme:
   name: material
+  custom_dir: docs/overrides
   features:
     - content.code.copy
     - navigation.instant
